@@ -69,8 +69,14 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-app.MapOpenApi();
-app.MapScalarApiReference();
+// API docs are for development only. Publishing the full OpenAPI document and the
+// Scalar explorer hands an attacker the entire endpoint surface (G8.7), so gate them
+// behind the Development environment.
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+    app.MapScalarApiReference();
+}
 
 // app.UseExceptionHandler();
 
