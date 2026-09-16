@@ -77,6 +77,16 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
     app.MapScalarApiReference();
 }
+else
+{
+    // Enforce HTTPS in production (G6.1/G6.4). Behind IIS out-of-process, UseIISIntegration
+    // already forwards the original scheme, so redirection resolves correctly (and no-ops
+    // rather than looping if the HTTPS port can't be determined). HSTS is dev-excluded so
+    // local http keeps working.
+    app.UseHsts();
+}
+
+app.UseHttpsRedirection();
 
 // app.UseExceptionHandler();
 
