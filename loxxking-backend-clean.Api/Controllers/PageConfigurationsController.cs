@@ -56,7 +56,7 @@ public class PageConfigurationsController : ControllerBase
     }
 
     [HttpPut("{key}")]
-    [AllowAnonymous]
+    [Authorize(Roles = "Admin,StoreManager")]
     public async Task<IActionResult> Upsert(string key, [FromBody] SavePageConfigRequest request, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(key)) return BadRequest("Key is required");
@@ -83,7 +83,7 @@ public class PageConfigurationsController : ControllerBase
     }
 
     [HttpPost("batch")]
-    [AllowAnonymous]
+    [Authorize(Roles = "Admin,StoreManager")]
     public async Task<IActionResult> BatchUpsert([FromBody] BatchSavePageConfigRequest request, CancellationToken ct)
     {
         if (request?.Configs == null || request.Configs.Count == 0)
