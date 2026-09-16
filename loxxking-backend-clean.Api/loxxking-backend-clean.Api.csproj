@@ -32,7 +32,7 @@
 
   <ItemGroup>
     <!-- SSO public key must ship with the publish output; App_Data is not content by default. -->
-    <Content Include="App_DataKeyssso_public_key.pem" CopyToPublishDirectory="PreserveNewest" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="App_Data\Keys\sso_public_key.pem" CopyToPublishDirectory="PreserveNewest" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
