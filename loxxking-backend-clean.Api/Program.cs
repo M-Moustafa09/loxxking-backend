@@ -11,6 +11,10 @@ using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Don't advertise the server implementation (G6.3). (IIS still adds X-Powered-By,
+// which is removed at the IIS level via web.config.)
+builder.WebHost.ConfigureKestrel(options => options.AddServerHeader = false);
+
 builder.Host.UseSerilog((context, services, configuration) => configuration
     .ReadFrom.Configuration(context.Configuration)
     .ReadFrom.Services(services)
@@ -87,6 +91,33 @@ else
 }
 
 app.UseHttpsRedirection();
+
+// Browser security headers (G6.3). Set early so they cover static files and the SPA
+// fallback too. X-Frame-Options is SAMEORIGIN (not DENY) because the dashboard previews
+// the storefront in a same-origin <iframe>. CSP is Report-Only for now — it observes
+// violations without breaking the Angular app; enforce it in a follow-up once the report
+// is clean (and after wiring a report endpoint).
+app.Use(async (context, next) =>
+{
+    var headers = context.Response.Headers;
+    headers["X-Content-Type-Options"] = "nosniff";
+    headers["X-Frame-Options"] = "SAMEORIGIN";
+    headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+    headers["Permissions-Policy"] = "geolocation=(), camera=(), microphone=(), payment=()";
+    headers["Content-Security-Policy-Report-Only"] =
+        "default-src 'self'; " +
+        "script-src 'self'; " +
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+        "font-src 'self' https://fonts.gstatic.com; " +
+        "img-src 'self' data: https:; " +
+        "connect-src 'self'; " +
+        "frame-ancestors 'self'; " +
+        "base-uri 'self'; " +
+        "form-action 'self'; " +
+        "object-src 'none'";
+    headers.Remove("X-Powered-By");
+    await next();
+});
 
 // app.UseExceptionHandler();
 
