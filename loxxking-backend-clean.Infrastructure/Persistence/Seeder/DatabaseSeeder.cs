@@ -1,5 +1,6 @@
 using loxxking_backend_clean.Infrastructure.Persistence.Seeder.Common;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -32,10 +33,21 @@ public static class DatabaseSeeder
             throw;
         }
 
+        // Seeding:Skip lists seeder type names to leave out (e.g. OrderSeeder, SupportSeeder in
+        // production, where their demo rows would be pushed to the CRM by the sync services).
+        var skip = scopedProvider.GetService<Microsoft.Extensions.Configuration.IConfiguration>()
+            ?.GetSection("Seeding:Skip").Get<string[]>() ?? Array.Empty<string>();
+
         var seeders = scopedProvider
             .GetServices<IDataSeeder>()
+            .Where(s => !skip.Contains(s.GetType().Name, StringComparer.OrdinalIgnoreCase))
             .OrderBy(s => s.Order)
             .ToList();
+
+        if (skip.Length > 0)
+        {
+            logger.LogWarning("Skipping seeders per Seeding:Skip: {Skipped}", string.Join(", ", skip));
+        }
 
         if (seeders.Count == 0)
         {

@@ -433,3 +433,6 @@ FodyWeavers.xsd
 front-end/
 Legecy_CRM/
 loxxking/
+
+# local publish/secrets
+appsettings.Production.json
