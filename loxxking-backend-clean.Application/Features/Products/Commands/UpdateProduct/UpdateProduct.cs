@@ -11,7 +11,8 @@ public record UpdateProductCommand(
     string? Features,
     string? ShippingPolicy,
     string? ReturnPolicy,
-    decimal BasePrice
+    decimal BasePrice,
+    string? ProductCode = null
 ) : IRequest<Result>;
 
 public class UpdateProductHandler : IRequestHandler<UpdateProductCommand, Result>
@@ -76,6 +77,10 @@ public class UpdateProductHandler : IRequestHandler<UpdateProductCommand, Result
             isBestSeller: product.IsBestSeller,
             badge: product.Badge
         );
+
+        // Luxira/CRM product code, chosen from the dashboard dropdown (G3.1). This command is a full
+        // replace (like the fields above), and the dashboard form submits the current code.
+        product.SetProductCode(request.ProductCode);
 
         _context.Products.Update(product);
         await _context.SaveChangesAsync(cancellationToken);

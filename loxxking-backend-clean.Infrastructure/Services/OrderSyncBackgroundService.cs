@@ -110,6 +110,7 @@ public class OrderSyncBackgroundService : BackgroundService
                 Items = order.OrderItems.Select(i => new CrmOrderItemSyncDto
                 {
                     ProductName = i.Product?.NameAr ?? i.Product?.NameEn ?? i.ProductId.ToString(),
+                    ProductCode = i.Product?.ProductCode, // Luxira/CRM code for CRM-side resolution (G3.1)
                     Quantity = i.Quantity,
                     UnitPrice = i.PriceAtOrder
                 }).ToList()

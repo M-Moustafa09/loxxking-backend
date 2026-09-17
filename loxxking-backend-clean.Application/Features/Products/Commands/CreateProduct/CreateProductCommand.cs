@@ -9,5 +9,6 @@ public record CreateProductCommand(
     string? Features,
     string? ShippingPolicy,
     string? ReturnPolicy,
-    decimal BasePrice
+    decimal BasePrice,
+    string? ProductCode = null
 ) : IRequest<Result<CreateProductResponse>>;

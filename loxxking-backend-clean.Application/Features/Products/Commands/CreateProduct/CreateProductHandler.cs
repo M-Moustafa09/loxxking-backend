@@ -67,6 +67,9 @@ public class CreateProductHandler : IRequestHandler<CreateProductCommand, Result
             returnPolicy: request.ReturnPolicy
         );
 
+        // Luxira/CRM product code, chosen from the dashboard dropdown (G3.1).
+        product.SetProductCode(request.ProductCode);
+
         _context.Products.Add(product);
         await _context.SaveChangesAsync(cancellationToken);
 
