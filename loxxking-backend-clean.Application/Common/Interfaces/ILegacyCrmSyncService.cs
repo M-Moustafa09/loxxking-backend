@@ -21,6 +21,9 @@ public class CrmOrderSyncDto
 public class CrmOrderItemSyncDto
 {
     public string ProductName { get; set; } = string.Empty;
+    // The Luxira/CRM product code, so the CRM can resolve this line to its warehouse row (G3.1).
+    // May be null for products an admin has not yet coded; the CRM decides how to handle that.
+    public string? ProductCode { get; set; }
     public int Quantity { get; set; }
     public decimal UnitPrice { get; set; }
 }
