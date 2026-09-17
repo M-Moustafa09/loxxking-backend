@@ -131,15 +131,38 @@ app.UseCors("AllowFrontend");
 app.UseRateLimiter();
 
 app.UseDefaultFiles();
+
+// The Angular build ships every JS/CSS/media file with a content hash in its name
+// (angular.json `outputHashing: "all"`, e.g. `styles-QRXD544R.css`). A given URL therefore
+// never changes its bytes, so those files can be cached for a year, immutably — the browser
+// stops re-validating them on every visit (G9.2). Anything WITHOUT a hash (index.html,
+// favicon.ico, assets/**) may change under a stable name, so it is not cached long. This is
+// fail-safe: turn hashing off and files stop matching and fall back to the short cache.
+var fingerprintedFile = new System.Text.RegularExpressions.Regex(
+    @"-[A-Z0-9]{8,}\.[a-zA-Z0-9]+$",
+    System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
 app.UseStaticFiles(new StaticFileOptions
 {
     OnPrepareResponse = ctx =>
     {
+        var headers = ctx.Context.Response.Headers;
         if (ctx.File.Name.EndsWith(".html", StringComparison.OrdinalIgnoreCase))
         {
-            ctx.Context.Response.Headers.Append("Cache-Control", "no-cache, no-store, must-revalidate");
-            ctx.Context.Response.Headers.Append("Pragma", "no-cache");
-            ctx.Context.Response.Headers.Append("Expires", "0");
+            // index.html must always be re-fetched so a new deploy's fingerprinted names load.
+            headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
+            headers["Pragma"] = "no-cache";
+            headers["Expires"] = "0";
+        }
+        else if (fingerprintedFile.IsMatch(ctx.File.Name))
+        {
+            headers["Cache-Control"] = "public, max-age=31536000, immutable";
+        }
+        else
+        {
+            // Non-fingerprinted (favicon, assets/**, licenses): cache briefly so an edit under
+            // the same name still reaches visitors within a day.
+            headers["Cache-Control"] = "public, max-age=86400";
         }
     }
 });
