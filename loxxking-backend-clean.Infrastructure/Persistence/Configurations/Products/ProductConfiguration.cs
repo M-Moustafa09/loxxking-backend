@@ -10,6 +10,9 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
         
         builder.Property(p => p.NameAr).IsRequired().HasMaxLength(200);
         builder.Property(p => p.NameEn).IsRequired().HasMaxLength(200);
+
+        // Luxira/CRM product code sent with synced order lines (G3.1).
+        builder.Property(p => p.ProductCode).HasMaxLength(64);
         
         builder.Property(p => p.BasePrice)
                .HasConversion(

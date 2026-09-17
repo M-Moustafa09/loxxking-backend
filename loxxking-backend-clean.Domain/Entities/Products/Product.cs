@@ -27,6 +27,11 @@ public class Product : BaseEntity
     public string? Badge { get; private set; }
     public List<string> Colors { get; private set; } = new();
 
+    // The Luxira/CRM product code for this item (e.g. "L41"). Assigned from the dashboard (a dropdown
+    // sourced from the Luxira product list) and sent with each synced order line so the CRM resolves the
+    // item to its warehouse row. Nullable: existing products carry none until an admin assigns one. (G3.1)
+    public string? ProductCode { get; private set; }
+
     public ICollection<ProductPrice> Prices { get; private set; } = new List<ProductPrice>();
 
     protected Product() { }
@@ -139,6 +144,11 @@ public class Product : BaseEntity
         IsNew = isNew;
         IsBestSeller = isBestSeller;
         Badge = badge;
+    }
+
+    public void SetProductCode(string? productCode)
+    {
+        ProductCode = string.IsNullOrWhiteSpace(productCode) ? null : productCode.Trim();
     }
 
     public void UpdateStock(int newStock)
