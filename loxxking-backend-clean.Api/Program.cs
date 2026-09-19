@@ -130,6 +130,33 @@ app.UseCors("AllowFrontend");
 
 app.UseRateLimiter();
 
+// G1.1: this app now serves loxxking.com, which the CRM still hands out in customers' shipment-
+// tracking links (loxxking.com/t/{code} and /Order/TrackLoxxKingShipment/{code}). Those paths have
+// no route in the Angular SPA, so the router's catch-all sent customers to the home page. Forward
+// them with a 301 to the CRM's PUBLIC domain, where the tracking page lives, so links sent before
+// and after the domain switch both work. The base URL is config-driven (LegacyCrm:PublicTrackingBaseUrl)
+// so a test store can point at the test CRM instead of production.
+var crmPublicTrackingBaseUrl =
+    (app.Configuration["LegacyCrm:PublicTrackingBaseUrl"] ?? "https://luxira.org").TrimEnd('/');
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path;
+    var isTrackingLink =
+        path.StartsWithSegments("/t", StringComparison.OrdinalIgnoreCase)
+        || path.StartsWithSegments("/Order/TrackLoxxKingShipment", StringComparison.OrdinalIgnoreCase);
+
+    if (isTrackingLink
+        && (HttpMethods.IsGet(context.Request.Method) || HttpMethods.IsHead(context.Request.Method)))
+    {
+        var destination = crmPublicTrackingBaseUrl + context.Request.Path + context.Request.QueryString;
+        context.Response.Headers.CacheControl = "public,max-age=3600";
+        context.Response.Redirect(destination, permanent: true);
+        return;
+    }
+
+    await next();
+});
+
 app.UseDefaultFiles();
 
 // The Angular build ships every JS/CSS/media file with a content hash in its name
