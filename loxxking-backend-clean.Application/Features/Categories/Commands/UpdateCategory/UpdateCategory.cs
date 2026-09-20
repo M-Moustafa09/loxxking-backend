@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Caching.Distributed;
+
 namespace loxxking_backend_clean.Application.Features.Categories.Commands.UpdateCategory;
 
 public record UpdateCategoryCommand(Guid Id, string NameEn, string NameAr) : IRequest<Result>;
@@ -5,7 +7,12 @@ public record UpdateCategoryCommand(Guid Id, string NameEn, string NameAr) : IRe
 public class UpdateCategoryHandler : IRequestHandler<UpdateCategoryCommand, Result>
 {
     private readonly IApplicationDbContext _context;
-    public UpdateCategoryHandler(IApplicationDbContext context) { _context = context; }
+    private readonly IDistributedCache _cache;
+    public UpdateCategoryHandler(IApplicationDbContext context, IDistributedCache cache)
+    {
+        _context = context;
+        _cache = cache;
+    }
 
     public async Task<Result> Handle(UpdateCategoryCommand request, CancellationToken cancellationToken)
     {
@@ -14,6 +21,10 @@ public class UpdateCategoryHandler : IRequestHandler<UpdateCategoryCommand, Resu
         cat.UpdateDetails(request.NameAr, request.NameEn, cat.Slug, cat.ImageUrl);
         _context.Categories.Update(cat);
         await _context.SaveChangesAsync(cancellationToken);
+
+        // Nothing cleared the cached list, so a renamed category kept its old name for ten minutes.
+        await _cache.RemoveAsync("CategoriesList", cancellationToken);
+
         return Result.Success();
     }
 }

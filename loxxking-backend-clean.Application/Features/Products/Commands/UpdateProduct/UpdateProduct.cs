@@ -85,8 +85,8 @@ public class UpdateProductHandler : IRequestHandler<UpdateProductCommand, Result
         _context.Products.Update(product);
         await _context.SaveChangesAsync(cancellationToken);
 
-        await _cache.RemoveAsync("ProductsList_", cancellationToken);
-        await _cache.RemoveAsync($"ProductsList_{product.CategoryId}", cancellationToken);
+        await _cache.RemoveAsync("ProductsList_v2_", cancellationToken);
+        await _cache.RemoveAsync($"ProductsList_v2_{product.CategoryId}", cancellationToken);
         await _cache.RemoveAsync($"ProductDetail_{product.Id}_ar", cancellationToken);
         await _cache.RemoveAsync($"ProductDetail_{product.Id}_en", cancellationToken);
 

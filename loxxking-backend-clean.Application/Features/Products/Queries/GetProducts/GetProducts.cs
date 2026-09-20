@@ -23,7 +23,16 @@ public record ProductListResponse(
     bool IsNew,
     bool IsBestSeller,
     string? Badge,
-    List<string> Colors
+    List<string> Colors,
+    // The dashboard edits a product through UpdateProductCommand, which is a full replace: anything
+    // it does not send back is wiped. So the list has to hand it every field that form owns — the
+    // category, the Luxira/CRM code (G3.1) and the three texts. Defaults keep the other callers
+    // (offers, bundles, favourites) building this record exactly as they do today.
+    Guid CategoryId = default,
+    string? ProductCode = null,
+    string? Features = null,
+    string? ShippingPolicy = null,
+    string? ReturnPolicy = null
 );
 
 public class GetProductsHandler : IRequestHandler<GetProductsQuery, Result<List<ProductListResponse>>>
@@ -39,7 +48,7 @@ public class GetProductsHandler : IRequestHandler<GetProductsQuery, Result<List<
 
     public async Task<Result<List<ProductListResponse>>> Handle(GetProductsQuery request, CancellationToken cancellationToken)
     {
-        string cacheKey = $"ProductsList_{request.CategoryId}";
+        string cacheKey = $"ProductsList_v2_{request.CategoryId}";
         var cachedData = await _cache.GetStringAsync(cacheKey, cancellationToken);
         
         List<ProductListResponse>? products = null;
@@ -71,7 +80,12 @@ public class GetProductsHandler : IRequestHandler<GetProductsQuery, Result<List<
                 p.IsNew,
                 p.IsBestSeller,
                 p.Badge,
-                p.Colors
+                p.Colors,
+                p.CategoryId,
+                p.ProductCode,
+                p.Features,
+                p.ShippingPolicy,
+                p.ReturnPolicy
             )).ToListAsync(cancellationToken);
             
             var options = new DistributedCacheEntryOptions()
