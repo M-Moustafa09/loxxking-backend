@@ -83,6 +83,35 @@ public static class DependencyInjection
             options.Cookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.SameAsRequest;
             options.LoginPath = "/api/auth/login";
             options.AccessDeniedPath = "/api/auth/access-denied";
+
+            // Neither path above is a real endpoint, so the default redirect sent API callers to the
+            // SPA fallback: an unauthenticated /api call answered 200 with index.html instead of 401.
+            // Answer API and SSO requests with a status code the Angular client can act on.
+            options.Events = new CookieAuthenticationEvents
+            {
+                OnRedirectToLogin = context =>
+                {
+                    if (IsApiRequest(context.Request))
+                    {
+                        context.Response.StatusCode = Microsoft.AspNetCore.Http.StatusCodes.Status401Unauthorized;
+                        return Task.CompletedTask;
+                    }
+
+                    context.Response.Redirect(context.RedirectUri);
+                    return Task.CompletedTask;
+                },
+                OnRedirectToAccessDenied = context =>
+                {
+                    if (IsApiRequest(context.Request))
+                    {
+                        context.Response.StatusCode = Microsoft.AspNetCore.Http.StatusCodes.Status403Forbidden;
+                        return Task.CompletedTask;
+                    }
+
+                    context.Response.Redirect(context.RedirectUri);
+                    return Task.CompletedTask;
+                }
+            };
         });
 
         services.AddMemoryCache();
@@ -117,4 +146,10 @@ public static class DependencyInjection
 
         return services;
     }
+
+    // Requests the Angular client makes with fetch/XHR: they expect a status code, never a redirect
+    // to a sign-in page. Everything else (a browser opening a page) keeps the normal redirect.
+    private static bool IsApiRequest(Microsoft.AspNetCore.Http.HttpRequest request) =>
+        request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase)
+        || request.Path.StartsWithSegments("/sso", StringComparison.OrdinalIgnoreCase);
 }
