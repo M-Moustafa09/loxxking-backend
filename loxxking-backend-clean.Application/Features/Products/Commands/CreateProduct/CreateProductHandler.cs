@@ -73,8 +73,8 @@ public class CreateProductHandler : IRequestHandler<CreateProductCommand, Result
         _context.Products.Add(product);
         await _context.SaveChangesAsync(cancellationToken);
 
-        await _cache.RemoveAsync("ProductsList_", cancellationToken);
-        await _cache.RemoveAsync($"ProductsList_{product.CategoryId}", cancellationToken);
+        await _cache.RemoveAsync("ProductsList_v2_", cancellationToken);
+        await _cache.RemoveAsync($"ProductsList_v2_{product.CategoryId}", cancellationToken);
 
         return Result.Success(new CreateProductResponse(product.Id));
     }

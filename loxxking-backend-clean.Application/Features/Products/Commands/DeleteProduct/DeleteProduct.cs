@@ -22,6 +22,10 @@ public class DeleteProductHandler : IRequestHandler<DeleteProductCommand, Result
         _context.Products.Remove(product);
         await _context.SaveChangesAsync(cancellationToken);
 
+        // The list cache was never cleared here, so a deleted product kept showing up for up to
+        // ten minutes — visible now that the dashboard deletes from a list it reloads right after.
+        await _cache.RemoveAsync("ProductsList_v2_", cancellationToken);
+        await _cache.RemoveAsync($"ProductsList_v2_{product.CategoryId}", cancellationToken);
         await _cache.RemoveAsync($"ProductDetail_{product.Id}_ar", cancellationToken);
         await _cache.RemoveAsync($"ProductDetail_{product.Id}_en", cancellationToken);
 
