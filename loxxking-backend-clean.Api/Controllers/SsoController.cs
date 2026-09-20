@@ -31,17 +31,20 @@ public class SsoController : ControllerBase
     private readonly ISsoJtiValidator _jtiValidator;
     private readonly IConfiguration _config;
     private readonly ILogger<SsoController> _logger;
+    private readonly IJwtProvider _jwtProvider;
 
     public SsoController(
         ApplicationDbContext context,
         ISsoJtiValidator jtiValidator,
         IConfiguration config,
-        ILogger<SsoController> logger)
+        ILogger<SsoController> logger,
+        IJwtProvider jwtProvider)
     {
         _context = context;
         _jtiValidator = jtiValidator;
         _config = config;
         _logger = logger;
+        _jwtProvider = jwtProvider;
     }
 
     [HttpPost("loxxking-token")]
@@ -165,5 +168,47 @@ public class SsoController : ControllerBase
 
         // 7. Hardcoded 302 Local Redirect
         return LocalRedirect("/admin");
+    }
+
+    // The SSO hand-off above signs the admin in with the .Loxxking.Session cookie, but the Angular
+    // app knows a user only by the JWT it keeps in localStorage (auth.service.ts, the HTTP
+    // interceptor and the chat hub all read it). Without this endpoint the admin arrives at /admin
+    // holding a valid session the SPA cannot see, so the guards bounce them to /admin/login and they
+    // sign in a second time. Here the SPA trades the cookie for the same token a normal admin login
+    // issues, so everything downstream behaves identically.
+    //
+    // Cookie scheme only: a request carrying a Bearer token already has a token and does not need one.
+    [HttpGet("/api/sso/session-token")]
+    [Authorize(AuthenticationSchemes = CookieAuthenticationDefaults.AuthenticationScheme)]
+    public async Task<IActionResult> GetSessionToken(CancellationToken ct)
+    {
+        var idClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(idClaim, out var userId))
+        {
+            _logger.LogWarning("SSO session-token denied: session cookie has no usable user id.");
+            return StatusCode(403, new { error = NotAuthorizedMessage });
+        }
+
+        // The cookie lives 12 hours, so re-check the account against the database instead of
+        // trusting the claims baked in at sign-in time: it may have been deactivated, deleted or
+        // demoted since (same checks, and the same generic 403, as the hand-off above — G5.9).
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (user == null || user.IsDeleted || !user.IsActive || user.Role != UserRole.Admin)
+        {
+            _logger.LogWarning("SSO session-token denied for user id {UserId}: account missing or no longer an active admin.", userId);
+            await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            return StatusCode(403, new { error = NotAuthorizedMessage });
+        }
+
+        _logger.LogInformation("SSO session-token issued for {Email}.", user.Email);
+
+        return Ok(new
+        {
+            token = _jwtProvider.Generate(user),
+            userId = user.Id,
+            role = user.Role.ToString().ToLowerInvariant(),
+            name = user.Name,
+            email = user.Email
+        });
     }
 }
