@@ -11,22 +11,28 @@ public class LogVisitHandler : IRequestHandler<LogVisitCommand, Result<LogVisitR
     private readonly IGeolocationService? _geolocationService;
     private readonly IIpResolverService? _ipResolver;
     private readonly IStringLocalizer<SharedResource>? _localizer;
+    private readonly IStoreVisitForwarder? _crmForwarder;
 
     public LogVisitHandler(
         IApplicationDbContext context,
         IGeolocationService? geolocationService = null,
         IIpResolverService? ipResolver = null,
-        IStringLocalizer<SharedResource>? localizer = null)
+        IStringLocalizer<SharedResource>? localizer = null,
+        IStoreVisitForwarder? crmForwarder = null)
     {
         _context = context;
         _geolocationService = geolocationService;
         _ipResolver = ipResolver;
         _localizer = localizer;
+        _crmForwarder = crmForwarder;
     }
 
     public async Task<Result<LogVisitResponse>> Handle(LogVisitCommand request, CancellationToken cancellationToken)
     {
         Country? country = null;
+        // The country the CRM is told about. Unlike `country`, it never falls back to the store's
+        // default country: an unresolved IP is reported as unknown rather than as Egypt.
+        string? visitorCountryName = null;
 
         if (request.CountryId.HasValue)
         {
@@ -40,6 +46,8 @@ public class LogVisitHandler : IRequestHandler<LogVisitCommand, Result<LogVisitR
             {
                 return Result.Failure<LogVisitResponse>(new Error("Error.NotFound", "Country_NotFound"));
             }
+
+            visitorCountryName = country.Name;
         }
         else
         {
@@ -51,6 +59,8 @@ public class LogVisitHandler : IRequestHandler<LogVisitCommand, Result<LogVisitR
                     var geo = await _geolocationService.GetGeoLocationAsync(request.IpAddress, cancellationToken);
                     if (geo != null && !string.IsNullOrEmpty(geo.CountryCode))
                     {
+                        visitorCountryName = string.IsNullOrWhiteSpace(geo.CountryName) ? geo.CountryCode : geo.CountryName;
+
                         country = await _context.Countries
                             .FirstOrDefaultAsync(c => 
                                 c.Name == geo.CountryName || 
@@ -108,6 +118,16 @@ public class LogVisitHandler : IRequestHandler<LogVisitCommand, Result<LogVisitR
         }
 
         await _context.SaveChangesAsync(cancellationToken);
+
+        if (request.ForwardToCrm)
+        {
+            _crmForwarder?.Enqueue(new StoreVisitNotice(
+                visitorCountryName,
+                request.Page,
+                request.Language,
+                request.IsNewVisitor,
+                DateTime.UtcNow));
+        }
 
         var successMsg = _localizer.Get("SiteVisit_TrackedSuccessfully", "Site visit tracked successfully.");
         return Result.Success(new LogVisitResponse(siteVisit.Id, successMsg));
