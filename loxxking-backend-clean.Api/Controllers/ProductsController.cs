@@ -1,6 +1,7 @@
 using loxxking_backend_clean.Application.Features.Products.Commands.CreateProduct;
 using loxxking_backend_clean.Application.Features.Products.Commands.DeleteProduct;
 using loxxking_backend_clean.Application.Features.Products.Commands.DeleteProductImage;
+using loxxking_backend_clean.Application.Features.Products.Commands.ProductVideo;
 using loxxking_backend_clean.Application.Features.Products.Commands.UpdateProduct;
 using loxxking_backend_clean.Application.Features.Products.Commands.UploadProductImage;
 using loxxking_backend_clean.Application.Features.Products.Queries.GetBestSellers;
@@ -49,6 +50,23 @@ public class ProductsController : ControllerBase
     [HttpDelete("{id:guid}/images")]
     [Authorize(Roles = "Admin,StoreManager")]
     public async Task<IActionResult> DeleteImage(Guid id, [FromQuery] string url, CancellationToken ct) => (await _sender.Send(new DeleteProductImageCommand(id, url), ct)).ToApiResponse();
+
+    // A 30 MB video plus the multipart envelope needs more than Kestrel's ~28.6 MB default body limit.
+    // IIS enforces its own limit too: see requestLimits in web.config.
+    [HttpPost("{id:guid}/video")]
+    [Authorize(Roles = "Admin,StoreManager")]
+    [RequestSizeLimit(ProductVideoRules.MaxBytes + 2 * 1024 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = ProductVideoRules.MaxBytes + 2 * 1024 * 1024)]
+    public async Task<IActionResult> UploadVideo(Guid id, IFormFile file, CancellationToken ct) {
+        if(file == null || file.Length == 0) return BadRequest(ApiResponse<object>.Fail(_localizer.Get("Product_VideoRequired", "Choose a video file.")));
+        await using var stream = file.OpenReadStream();
+        var cmd = new UploadProductVideoCommand(id, stream, file.FileName, file.ContentType, file.Length);
+        return (await _sender.Send(cmd, ct)).ToApiResponse();
+    }
+
+    [HttpDelete("{id:guid}/video")]
+    [Authorize(Roles = "Admin,StoreManager")]
+    public async Task<IActionResult> DeleteVideo(Guid id, CancellationToken ct) => (await _sender.Send(new DeleteProductVideoCommand(id), ct)).ToApiResponse();
 
     [HttpGet("best-sellers")]
     public async Task<IActionResult> GetBestSellers(CancellationToken ct, [FromQuery] int top = 20) => (await _sender.Send(new GetBestSellersQuery(top), ct)).ToApiResponse();

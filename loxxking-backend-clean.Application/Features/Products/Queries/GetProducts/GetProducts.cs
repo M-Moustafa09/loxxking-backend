@@ -32,7 +32,8 @@ public record ProductListResponse(
     string? ProductCode = null,
     string? Features = null,
     string? ShippingPolicy = null,
-    string? ReturnPolicy = null
+    string? ReturnPolicy = null,
+    string? VideoUrl = null
 );
 
 public class GetProductsHandler : IRequestHandler<GetProductsQuery, Result<List<ProductListResponse>>>
@@ -85,7 +86,8 @@ public class GetProductsHandler : IRequestHandler<GetProductsQuery, Result<List<
                 p.ProductCode,
                 p.Features,
                 p.ShippingPolicy,
-                p.ReturnPolicy
+                p.ReturnPolicy,
+                p.VideoUrl
             )).ToListAsync(cancellationToken);
             
             var options = new DistributedCacheEntryOptions()

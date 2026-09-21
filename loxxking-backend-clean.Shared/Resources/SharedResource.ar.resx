@@ -115,6 +115,15 @@
   <data name="Product_CodeInUse" xml:space="preserve">
     <value>كود المنتج هذا مرتبط بمنتج آخر في المتجر. اختر منتجاً آخر من لوكسيرا.</value>
   </data>
+  <data name="Product_VideoRequired" xml:space="preserve">
+    <value>اختر ملف الفيديو.</value>
+  </data>
+  <data name="Product_VideoFormat" xml:space="preserve">
+    <value>يجب أن يكون الفيديو بصيغة MP4 أو WebM.</value>
+  </data>
+  <data name="Product_VideoTooLarge" xml:space="preserve">
+    <value>الفيديو أكبر من 30 ميجابايت. اضغطه وحاول مرة أخرى.</value>
+  </data>
   <data name="Product_NotFound" xml:space="preserve">
     <value>المنتج غير موجود.</value>
   </data>

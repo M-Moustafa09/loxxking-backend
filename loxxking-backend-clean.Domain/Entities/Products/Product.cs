@@ -32,6 +32,10 @@ public class Product : BaseEntity
     // item to its warehouse row. Nullable: existing products carry none until an admin assigns one. (G3.1)
     public string? ProductCode { get; private set; }
 
+    // One optional video, shown on the product page after the images. Uploaded on its own endpoint
+    // (not inline like the images) because a video is too big to travel inside the JSON body.
+    public string? VideoUrl { get; private set; }
+
     public ICollection<ProductPrice> Prices { get; private set; } = new List<ProductPrice>();
 
     protected Product() { }
@@ -149,6 +153,11 @@ public class Product : BaseEntity
     public void SetProductCode(string? productCode)
     {
         ProductCode = string.IsNullOrWhiteSpace(productCode) ? null : productCode.Trim();
+    }
+
+    public void SetVideoUrl(string? videoUrl)
+    {
+        VideoUrl = string.IsNullOrWhiteSpace(videoUrl) ? null : videoUrl.Trim();
     }
 
     public void UpdateStock(int newStock)

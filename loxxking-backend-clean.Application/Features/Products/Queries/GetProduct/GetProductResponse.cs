@@ -19,5 +19,6 @@ public record GetProductResponse(
     bool IsNew,
     bool IsBestSeller,
     string? Badge,
-    List<string> Colors
+    List<string> Colors,
+    string? VideoUrl = null
 );
