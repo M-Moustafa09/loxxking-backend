@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -14,6 +15,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.Extensions.Logging;
 using loxxking_backend_clean.Application.Common.Interfaces;
 using loxxking_backend_clean.Infrastructure.Persistence;
+using StoreUser = loxxking_backend_clean.Domain.Entities.Users.User;
 using loxxking_backend_clean.Domain.Enums;
 
 namespace loxxking_backend_clean.Api.Controllers;
@@ -32,14 +34,17 @@ public class SsoController : ControllerBase
     private readonly IConfiguration _config;
     private readonly ILogger<SsoController> _logger;
     private readonly IJwtProvider _jwtProvider;
+    private readonly UserManager<StoreUser> _userManager;
 
     public SsoController(
         ApplicationDbContext context,
         ISsoJtiValidator jtiValidator,
         IConfiguration config,
         ILogger<SsoController> logger,
-        IJwtProvider jwtProvider)
+        IJwtProvider jwtProvider,
+        UserManager<StoreUser> userManager)
     {
+        _userManager = userManager;
         _context = context;
         _jtiValidator = jtiValidator;
         _config = config;
@@ -123,11 +128,20 @@ public class SsoController : ControllerBase
         var normalizedEmail = email.ToUpperInvariant();
         var userInDb = await _context.Users.FirstOrDefaultAsync(u => u.NormalizedEmail == normalizedEmail, ct);
 
+        // The token is signed by the CRM, which only issues it to an account holding its Admin
+        // role, so a valid signature is the proof this person is a Luxira admin. A Luxira admin
+        // with no account here gets one on first sign-in. An account that already exists is never
+        // created or promoted here: it goes through the checks below like any other.
+        if (userInDb == null)
+        {
+            userInDb = await ProvisionAdminAsync(email, ct);
+        }
+
         // Authorization checks — one generic 403 to the client for every case, so the
         // response never reveals whether the account exists or its state (G5.9).
         if (userInDb == null)
         {
-            _logger.LogWarning("SSO denied: no Loxxking user for email {Email}.", email);
+            _logger.LogWarning("SSO denied: no Loxxking user for email {Email} and it could not be created.", email);
             return StatusCode(403, new { error = NotAuthorizedMessage });
         }
         if (userInDb.IsDeleted)
@@ -168,6 +182,44 @@ public class SsoController : ControllerBase
 
         // 7. Hardcoded 302 Local Redirect
         return LocalRedirect("/admin");
+    }
+
+    // Creates the store-side Admin account for a Luxira admin signing in for the first time.
+    // Country is the store's default (same rule as CreateStoreManager). The password is random and
+    // never shown to anyone: this account signs in through the CRM only, and a store admin can set
+    // one later with the existing change-password flow. Returns null when it cannot be created.
+    private async Task<StoreUser?> ProvisionAdminAsync(string email, CancellationToken ct)
+    {
+        var defaultCountry = await _context.Countries.FirstOrDefaultAsync(c => c.IsDefault, ct);
+        if (defaultCountry == null)
+        {
+            _logger.LogError("SSO auto-provision failed for {Email}: the store has no default country.", email);
+            return null;
+        }
+
+        // 48 random bytes of base64 plus a fixed suffix so it always satisfies the password policy.
+        var password = Convert.ToBase64String(RandomNumberGenerator.GetBytes(48)) + "aA1!";
+        var name = email.Contains('@') ? email[..email.IndexOf('@')] : email;
+
+        var user = StoreUser.Create(
+            name,
+            email,
+            "0000000000", // User.Create requires a phone; the admin can fill in a real one later.
+            "#PENDING_HASH#",
+            defaultCountry.Id,
+            UserRole.Admin);
+
+        var result = await _userManager.CreateAsync(user, password);
+        if (!result.Succeeded)
+        {
+            // Most likely two first sign-ins raced and the other one created it: read it back.
+            _logger.LogWarning("SSO auto-provision for {Email} did not create a user: {Errors}",
+                email, string.Join(", ", result.Errors.Select(e => e.Code)));
+            return await _context.Users.FirstOrDefaultAsync(u => u.NormalizedEmail == email.ToUpperInvariant(), ct);
+        }
+
+        _logger.LogWarning("SSO auto-provisioned a new Admin account for {Email} (user id {UserId}).", email, user.Id);
+        return user;
     }
 
     // The SSO hand-off above signs the admin in with the .Loxxking.Session cookie, but the Angular
