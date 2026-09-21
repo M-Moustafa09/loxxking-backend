@@ -62,7 +62,11 @@ public class GetProductsHandler : IRequestHandler<GetProductsQuery, Result<List<
         {
             var query = _context.Products.AsQueryable();
             if (request.CategoryId.HasValue) query = query.Where(p => p.CategoryId == request.CategoryId);
-            products = await query.Select(p => new ProductListResponse(
+            // Newest first: the home page's «الأكثر مبيعاً» shows the whole catalogue in this order, so a
+            // product the admin just added leads the row. `Id` breaks ties (seeded rows share a timestamp).
+            products = await query
+                .OrderByDescending(p => p.CreatedAt).ThenBy(p => p.Id)
+                .Select(p => new ProductListResponse(
                 p.Id, 
                 p.Slug,
                 p.NameEn, 
