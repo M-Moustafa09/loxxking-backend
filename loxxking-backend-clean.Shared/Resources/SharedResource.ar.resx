@@ -118,6 +118,9 @@
   <data name="Product_PriceNotFound" xml:space="preserve">
     <value>لم يتم العثور على سعر لهذا المنتج.</value>
   </data>
+  <data name="Category_HasProducts" xml:space="preserve">
+    <value>لا يمكن حذف قسم فيه منتجات. انقل منتجاته إلى قسم آخر أو احذفها أولاً.</value>
+  </data>
   <data name="Category_NotFound" xml:space="preserve">
     <value>القسم غير موجود.</value>
   </data>

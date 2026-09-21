@@ -3,22 +3,26 @@ using Microsoft.Extensions.Caching.Distributed;
 
 namespace loxxking_backend_clean.Application.Features.Categories.Commands.CreateCategory;
 
-public record CreateCategoryCommand(string NameEn, string NameAr) : IRequest<Result<Guid>>;
+/// <summary>`Image` is optional: a data URL from the dashboard, or an existing URL.</summary>
+public record CreateCategoryCommand(string NameEn, string NameAr, string? Image = null) : IRequest<Result<Guid>>;
 
 public class CreateCategoryHandler : IRequestHandler<CreateCategoryCommand, Result<Guid>>
 {
     private readonly IApplicationDbContext _context;
     private readonly IDistributedCache _cache;
-    public CreateCategoryHandler(IApplicationDbContext context, IDistributedCache cache)
+    private readonly IFileStorageService _fileStorage;
+    public CreateCategoryHandler(IApplicationDbContext context, IDistributedCache cache, IFileStorageService fileStorage)
     {
         _context = context;
         _cache = cache;
+        _fileStorage = fileStorage;
     }
 
     public async Task<Result<Guid>> Handle(CreateCategoryCommand request, CancellationToken cancellationToken)
     {
-        var slug = request.NameEn.ToLower().Replace(" ", "-") + "-" + Guid.NewGuid().ToString().Substring(0, 8);
-        var cat = Category.Create(request.NameAr, request.NameEn, slug, string.Empty);
+        var slug = await CategoryFields.UniqueSlugAsync(_context, request.NameEn, cancellationToken);
+        var image = await CategoryFields.StoreImageAsync(_fileStorage, request.Image, cancellationToken);
+        var cat = Category.Create(request.NameAr, request.NameEn, slug, image);
         _context.Categories.Add(cat);
         await _context.SaveChangesAsync(cancellationToken);
 

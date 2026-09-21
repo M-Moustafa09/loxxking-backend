@@ -18,7 +18,14 @@ public class DeleteCategoryHandler : IRequestHandler<DeleteCategoryCommand, Resu
     {
         var cat = await _context.Categories.FirstOrDefaultAsync(c => c.Id == request.Id, cancellationToken);
         if (cat == null) return Result.Failure(new Error("Error.NotFound", "Category_NotFound"));
-        _context.Categories.Remove(cat);
+
+        // A category that still holds products cannot go: they would be left in a category nobody can see.
+        var hasProducts = await _context.Products.AnyAsync(p => p.CategoryId == cat.Id, cancellationToken);
+        if (hasProducts) return Result.Failure(new Error("Error.Validation", "Category_HasProducts"));
+
+        // Soft delete, like products. Deleted products still reference their category and the foreign
+        // key is Restrict, so a real DELETE failed with a 500 for any category that ever held a product.
+        cat.IsDeleted = true;
         await _context.SaveChangesAsync(cancellationToken);
 
         // Nothing cleared the cached list, so a deleted category kept showing for ten minutes.
