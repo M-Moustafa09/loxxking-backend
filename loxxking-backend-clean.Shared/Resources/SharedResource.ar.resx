@@ -112,6 +112,9 @@
   <data name="Common_NotFound" xml:space="preserve">
     <value>{0} غير موجود.</value>
   </data>
+  <data name="Product_CodeInUse" xml:space="preserve">
+    <value>كود المنتج هذا مرتبط بمنتج آخر في المتجر. اختر منتجاً آخر من لوكسيرا.</value>
+  </data>
   <data name="Product_NotFound" xml:space="preserve">
     <value>المنتج غير موجود.</value>
   </data>

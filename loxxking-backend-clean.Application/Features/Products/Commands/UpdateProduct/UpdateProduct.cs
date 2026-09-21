@@ -32,6 +32,8 @@ public class UpdateProductHandler : IRequestHandler<UpdateProductCommand, Result
     {
         var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == request.Id, cancellationToken);
         if (product == null) return Result.Failure(new Error("Error.NotFound", "Product_NotFound"));
+        if (await ProductCodeGuard.IsTakenAsync(_context, request.ProductCode, product.Id, cancellationToken))
+            return Result.Failure(new Error("Error.Validation", "Product_CodeInUse"));
 
         var imageUrls = new List<string>();
         if (request.Images != null)
