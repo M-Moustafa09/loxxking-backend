@@ -19,7 +19,10 @@ public class DeleteProductHandler : IRequestHandler<DeleteProductCommand, Result
     {
         var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == request.Id, cancellationToken);
         if (product == null) return Result.Failure(new Error("Error.NotFound", "Product_NotFound"));
-        _context.Products.Remove(product);
+        // Soft delete: a hard delete is refused by the FKs from order lines, inventory, prices and
+        // reviews, and would erase what past orders were for. The query filter hides it everywhere.
+        product.IsDeleted = true;
+        product.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(cancellationToken);
 
         // The list cache was never cleared here, so a deleted product kept showing up for up to
@@ -28,6 +31,8 @@ public class DeleteProductHandler : IRequestHandler<DeleteProductCommand, Result
         await _cache.RemoveAsync($"ProductsList_v2_{product.CategoryId}", cancellationToken);
         await _cache.RemoveAsync($"ProductDetail_{product.Id}_ar", cancellationToken);
         await _cache.RemoveAsync($"ProductDetail_{product.Id}_en", cancellationToken);
+        await _cache.RemoveAsync($"ProductDetail_Slug_{product.Slug}_ar", cancellationToken);
+        await _cache.RemoveAsync($"ProductDetail_Slug_{product.Slug}_en", cancellationToken);
 
         return Result.Success();
     }

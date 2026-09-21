@@ -97,7 +97,8 @@ public class ProductSeeder : IDataSeeder
 
         foreach (var p in productsDefs)
         {
-            var existingProduct = await dbContext.Products.FirstOrDefaultAsync(x => x.Slug == p.Slug, cancellationToken);
+            // Deleted seed products still count as existing, or every restart would bring them back.
+            var existingProduct = await dbContext.Products.IgnoreQueryFilters().FirstOrDefaultAsync(x => x.Slug == p.Slug, cancellationToken);
             if (existingProduct == null)
             {
                 var product = Product.Create(

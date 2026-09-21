@@ -7,7 +7,12 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
     public void Configure(EntityTypeBuilder<Product> builder)
     {
         builder.HasKey(p => p.Id);
-        
+
+        // Deleting a product only flags it: order lines, inventory, prices and reviews all point at it
+        // and are restricted, so a real delete failed with a 500. The filter hides it from the store
+        // and the dashboard; the order sync and the seeder opt out with IgnoreQueryFilters.
+        builder.HasQueryFilter(p => !p.IsDeleted);
+
         builder.Property(p => p.NameAr).IsRequired().HasMaxLength(200);
         builder.Property(p => p.NameEn).IsRequired().HasMaxLength(200);
 

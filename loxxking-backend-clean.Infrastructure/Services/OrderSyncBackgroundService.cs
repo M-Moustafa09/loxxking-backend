@@ -74,12 +74,16 @@ public class OrderSyncBackgroundService : BackgroundService
         var dbContext = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
         var syncService = scope.ServiceProvider.GetRequiredService<ILegacyCrmSyncService>();
 
+        // IgnoreQueryFilters keeps the lines of a product deleted after the order was placed — the
+        // Product filter would otherwise drop them and the CRM would get an order missing items.
+        // It also lifts the Order filter, so deleted orders are excluded by hand.
         var pendingOrders = await dbContext.Orders
+            .IgnoreQueryFilters()
             .Include(o => o.OrderItems)
                 .ThenInclude(i => i.Product)
             .Include(o => o.Country)
             .Include(o => o.Customer)
-            .Where(o => !o.IsSynced)
+            .Where(o => !o.IsSynced && !o.IsDeleted)
             .OrderBy(o => o.CreatedAt)
             .Take(20)
             .ToListAsync(stoppingToken);
