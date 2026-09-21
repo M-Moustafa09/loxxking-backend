@@ -19,6 +19,8 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
         // Luxira/CRM product code sent with synced order lines (G3.1).
         builder.Property(p => p.ProductCode).HasMaxLength(64);
         builder.Property(p => p.VideoUrl).HasMaxLength(500);
+        builder.Property(p => p.InternationalPrice).HasPrecision(18, 2);
+        builder.Property(p => p.InternationalOriginalPrice).HasPrecision(18, 2);
         
         builder.Property(p => p.BasePrice)
                .HasConversion(

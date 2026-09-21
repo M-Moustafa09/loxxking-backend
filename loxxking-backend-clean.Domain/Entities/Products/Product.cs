@@ -36,6 +36,14 @@ public class Product : BaseEntity
     // (not inline like the images) because a video is too big to travel inside the JSON body.
     public string? VideoUrl { get; private set; }
 
+    // What a customer pays depends on their country (owner decision 2026-09-21): the admin sets a
+    // price per country (Prices, in that country's currency), and this international price in USD
+    // is shown to visitors whose country is not listed or has no price for the product. Null on
+    // products created before per-country pricing until an admin fills it; such a product is not
+    // shown where it would need it. BasePrice is legacy: it mirrors this price on every save.
+    public decimal? InternationalPrice { get; private set; }
+    public decimal? InternationalOriginalPrice { get; private set; }
+
     public ICollection<ProductPrice> Prices { get; private set; } = new List<ProductPrice>();
 
     protected Product() { }
@@ -153,6 +161,18 @@ public class Product : BaseEntity
     public void SetProductCode(string? productCode)
     {
         ProductCode = string.IsNullOrWhiteSpace(productCode) ? null : productCode.Trim();
+    }
+
+    public void SetInternationalPrice(decimal price, decimal? originalPrice)
+    {
+        if (price <= 0) throw new ArgumentException("Domain_Product_BasePriceRequired", nameof(price));
+
+        InternationalPrice = price;
+        InternationalOriginalPrice = originalPrice is > 0 ? originalPrice : null;
+        BasePrice = loxxking_backend_clean.Domain.ValueObjects.Money.FromDecimal(price);
+        OriginalPrice = InternationalOriginalPrice is decimal original
+            ? loxxking_backend_clean.Domain.ValueObjects.Money.FromDecimal(original)
+            : null;
     }
 
     public void SetVideoUrl(string? videoUrl)

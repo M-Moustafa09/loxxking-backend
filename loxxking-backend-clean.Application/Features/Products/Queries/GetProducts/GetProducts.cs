@@ -33,7 +33,12 @@ public record ProductListResponse(
     string? Features = null,
     string? ShippingPolicy = null,
     string? ReturnPolicy = null,
-    string? VideoUrl = null
+    string? VideoUrl = null,
+    // Per-country pricing (2026-09-21). Price/OriginalPrice above are the legacy single price;
+    // the storefront shows the visitor's country price, else the international USD price.
+    decimal? InternationalPrice = null,
+    decimal? InternationalOriginalPrice = null,
+    List<CountryPriceDto>? CountryPrices = null
 );
 
 public class GetProductsHandler : IRequestHandler<GetProductsQuery, Result<List<ProductListResponse>>>
@@ -91,7 +96,13 @@ public class GetProductsHandler : IRequestHandler<GetProductsQuery, Result<List<
                 p.Features,
                 p.ShippingPolicy,
                 p.ReturnPolicy,
-                p.VideoUrl
+                p.VideoUrl,
+                p.InternationalPrice,
+                p.InternationalOriginalPrice,
+                p.Prices
+                    .Where(pp => pp.Country.IsActive && !pp.Country.IsDeleted)
+                    .Select(pp => new CountryPriceDto(pp.CountryId, pp.Country.Code, pp.Country.Currency, pp.Price, pp.OriginalPrice))
+                    .ToList()
             )).ToListAsync(cancellationToken);
             
             var options = new DistributedCacheEntryOptions()

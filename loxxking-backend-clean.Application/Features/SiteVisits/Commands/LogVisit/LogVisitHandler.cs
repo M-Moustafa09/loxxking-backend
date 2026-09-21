@@ -61,19 +61,11 @@ public class LogVisitHandler : IRequestHandler<LogVisitCommand, Result<LogVisitR
                     {
                         visitorCountryName = string.IsNullOrWhiteSpace(geo.CountryName) ? geo.CountryCode : geo.CountryName;
 
+                        // Only a country the store sells in. A visit no longer creates a country
+                        // (owner decision 2026-09-21: the list is fixed); others fall back below.
+                        var code = geo.CountryCode.Trim().ToUpper();
                         country = await _context.Countries
-                            .FirstOrDefaultAsync(c => 
-                                c.Name == geo.CountryName || 
-                                c.Name == geo.CountryCode || 
-                                EF.Functions.Like(c.Name, geo.CountryName + "%"), 
-                                cancellationToken);
-
-                        if (country == null)
-                        {
-                            country = Country.Create(geo.CountryName, geo.Currency, "en", isDefault: false);
-                            _context.Countries.Add(country);
-                            await _context.SaveChangesAsync(cancellationToken);
-                        }
+                            .FirstOrDefaultAsync(c => c.Code == code && c.IsActive && !c.IsDeleted, cancellationToken);
                     }
                 }
                 catch

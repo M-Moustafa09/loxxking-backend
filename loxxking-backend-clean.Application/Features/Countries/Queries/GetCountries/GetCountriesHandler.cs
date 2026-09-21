@@ -24,13 +24,18 @@ public class GetCountriesHandler : IRequestHandler<GetCountriesQuery, Result<Lis
             if (cachedCountries != null) return Result.Success(cachedCountries);
         }
 
+        // Only the countries the store sells in (the CRM's 16). Rows created in the past from
+        // visitors' IPs are switched off and must not appear in the dashboard's price picker.
         var countries = await _context.Countries
+            .Where(c => c.IsActive && !c.IsDeleted)
             .OrderBy(c => c.Name)
             .Select(c => new GetCountriesResponse(
                 c.Id,
                 c.Name,
                 c.Currency,
-                c.DefaultLanguage
+                c.DefaultLanguage,
+                c.Code,
+                c.NameAr
             ))
             .ToListAsync(cancellationToken);
 

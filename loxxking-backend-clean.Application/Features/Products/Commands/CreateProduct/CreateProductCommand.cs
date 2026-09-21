@@ -10,5 +10,8 @@ public record CreateProductCommand(
     string? ShippingPolicy,
     string? ReturnPolicy,
     decimal BasePrice,
-    string? ProductCode = null
+    string? ProductCode = null,
+    // Per-country pricing (2026-09-21): BasePrice is the international USD price.
+    decimal? InternationalOriginalPrice = null,
+    List<CountryPriceInput>? CountryPrices = null
 ) : IRequest<Result<CreateProductResponse>>;

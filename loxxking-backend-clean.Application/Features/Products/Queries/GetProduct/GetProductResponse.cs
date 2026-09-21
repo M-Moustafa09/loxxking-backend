@@ -20,5 +20,10 @@ public record GetProductResponse(
     bool IsBestSeller,
     string? Badge,
     List<string> Colors,
-    string? VideoUrl = null
+    string? VideoUrl = null,
+    // Per-country pricing (2026-09-21). Price/OriginalPrice above are the legacy single price;
+    // the storefront shows the visitor's country price, else the international USD price.
+    decimal? InternationalPrice = null,
+    decimal? InternationalOriginalPrice = null,
+    List<CountryPriceDto>? CountryPrices = null
 );
