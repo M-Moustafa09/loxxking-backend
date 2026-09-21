@@ -23,7 +23,14 @@ public class SiteVisitsController : ControllerBase
     public async Task<IActionResult> LogVisit([FromBody] LogVisitRequest request, CancellationToken cancellationToken)
     {
         var ip = _ipResolver.GetClientIpAddress();
-        var command = new LogVisitCommand(request.CountryId, request.Page, ip);
+        var language = request.Language is "ar" or "en" ? request.Language : null;
+        var command = new LogVisitCommand(
+            request.CountryId,
+            request.Page,
+            ip,
+            language,
+            request.IsNewVisitor,
+            ForwardToCrm: !IsCrawler(Request.Headers.UserAgent.ToString()));
         var result = await _sender.Send(command, cancellationToken);
         return result.ToApiResponse();
     }
@@ -51,6 +58,19 @@ public class SiteVisitsController : ControllerBase
         var result = await _sender.Send(query, cancellationToken);
         return result.ToApiResponse();
     }
+
+    // Search engines render the storefront's JavaScript too, so they reach this endpoint. Their
+    // visits are still logged, but the CRM (popup + email per visit) is only told about people.
+    private static readonly string[] CrawlerMarkers =
+    {
+        "bot", "crawler", "spider", "slurp", "headless", "lighthouse", "pagespeed", "preview", "facebookexternalhit"
+    };
+
+    private static bool IsCrawler(string userAgent) =>
+        string.IsNullOrWhiteSpace(userAgent)
+        || CrawlerMarkers.Any(marker => userAgent.Contains(marker, StringComparison.OrdinalIgnoreCase));
 }
 
-public record LogVisitRequest(Guid? CountryId, string Page);
+/// <param name="Language">Storefront language shown to the visitor ("ar" / "en").</param>
+/// <param name="IsNewVisitor">First visit from this browser (set by the storefront).</param>
+public record LogVisitRequest(Guid? CountryId, string Page, string? Language = null, bool IsNewVisitor = false);
