@@ -185,6 +185,14 @@ app.UseStaticFiles(new StaticFileOptions
         {
             headers["Cache-Control"] = "public, max-age=31536000, immutable";
         }
+        else if (ctx.Context.Request.Path.StartsWithSegments("/assets/i18n", StringComparison.OrdinalIgnoreCase))
+        {
+            // The translation files change with every release under the same name. Cached for a
+            // day, a returning visitor got the new bundle with yesterday's ar.json and saw raw keys
+            // (ADMIN_CATEGORIES.TITLE…) until it expired. `no-cache` still lets the browser keep
+            // the file, but it revalidates (ETag → 304) on each load, so a deploy shows at once.
+            headers["Cache-Control"] = "no-cache";
+        }
         else
         {
             // Non-fingerprinted (favicon, assets/**, licenses): cache briefly so an edit under
