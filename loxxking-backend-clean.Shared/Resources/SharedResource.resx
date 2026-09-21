@@ -112,6 +112,9 @@
   <data name="Common_NotFound" xml:space="preserve">
     <value>{0} not found.</value>
   </data>
+  <data name="Product_CodeInUse" xml:space="preserve">
+    <value>This product code is already linked to another store product. Pick another Luxira product.</value>
+  </data>
   <data name="Product_NotFound" xml:space="preserve">
     <value>Product not found.</value>
   </data>

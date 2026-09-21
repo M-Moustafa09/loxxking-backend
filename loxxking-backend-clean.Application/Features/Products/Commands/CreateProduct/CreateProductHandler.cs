@@ -26,6 +26,11 @@ public class CreateProductHandler : IRequestHandler<CreateProductCommand, Result
             return Result.Failure<CreateProductResponse>(new Error("Error.NotFound", "Category_NotFound"));
         }
 
+        if (await ProductCodeGuard.IsTakenAsync(_context, request.ProductCode, null, cancellationToken))
+        {
+            return Result.Failure<CreateProductResponse>(new Error("Error.Validation", "Product_CodeInUse"));
+        }
+
         var imageUrls = new List<string>();
         if (request.Images != null)
         {
