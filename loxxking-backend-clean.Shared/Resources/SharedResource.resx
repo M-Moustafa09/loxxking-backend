@@ -118,6 +118,9 @@
   <data name="Product_PriceNotFound" xml:space="preserve">
     <value>Price not found for this product.</value>
   </data>
+  <data name="Category_HasProducts" xml:space="preserve">
+    <value>A category that still has products cannot be deleted. Move or delete its products first.</value>
+  </data>
   <data name="Category_NotFound" xml:space="preserve">
     <value>Category not found.</value>
   </data>

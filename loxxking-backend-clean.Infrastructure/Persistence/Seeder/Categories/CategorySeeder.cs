@@ -24,7 +24,8 @@ public class CategorySeeder : IDataSeeder
 
         foreach (var (nameAr, nameEn, slug, imageUrl) in categoriesToSeed)
         {
-            var existing = await dbContext.Categories.FirstOrDefaultAsync(c => c.Slug == slug, cancellationToken);
+            // IgnoreQueryFilters: a seed category the owner deleted must stay deleted, not come back on the next --seed.
+            var existing = await dbContext.Categories.IgnoreQueryFilters().FirstOrDefaultAsync(c => c.Slug == slug, cancellationToken);
             if (existing == null)
             {
                 var category = Category.Create(nameAr, nameEn, slug, imageUrl);
@@ -35,6 +36,6 @@ public class CategorySeeder : IDataSeeder
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        context.Categories = await dbContext.Categories.ToListAsync(cancellationToken);
+        context.Categories = await dbContext.Categories.IgnoreQueryFilters().ToListAsync(cancellationToken);
     }
 }
