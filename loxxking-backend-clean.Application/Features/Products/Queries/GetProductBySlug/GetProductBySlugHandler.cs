@@ -56,7 +56,8 @@ public class GetProductBySlugHandler : IRequestHandler<GetProductBySlugQuery, Re
             product.IsNew,
             product.IsBestSeller,
             product.Badge,
-            product.Colors
+            product.Colors,
+            product.VideoUrl
         );
 
         var options = new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30) };
