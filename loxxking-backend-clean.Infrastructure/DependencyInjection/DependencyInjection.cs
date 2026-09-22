@@ -45,6 +45,14 @@ public static class DependencyInjection
                     return JwtBearerDefaults.AuthenticationScheme;
                 }
 
+                // A browser WebSocket cannot send headers, so the chat hub gets the token in the query
+                // (read by OnMessageReceived below). Without this the hub saw every customer as a guest.
+                if (context.Request.Path.StartsWithSegments("/chatHub")
+                    && !string.IsNullOrEmpty(context.Request.Query["access_token"]))
+                {
+                    return JwtBearerDefaults.AuthenticationScheme;
+                }
+
                 return CookieAuthenticationDefaults.AuthenticationScheme;
             };
         })

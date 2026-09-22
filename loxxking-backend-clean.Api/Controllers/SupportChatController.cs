@@ -16,11 +16,21 @@ public class SupportChatController : ControllerBase
     [HttpGet("messages/{conversationId}")]
     [HttpGet("conversations/{conversationId:guid}/messages")]
     [AllowAnonymous]
-    public async Task<IActionResult> GetMessages(Guid conversationId, CancellationToken ct) => (await _sender.Send(new GetMessagesQuery(conversationId), ct)).ToApiResponse();
+    public async Task<IActionResult> GetMessages(Guid conversationId, [FromHeader(Name = "X-Guest-Id")] string? guestId, CancellationToken ct)
+        => (await _sender.Send(ReadQuery(conversationId, guestId), ct)).ToApiResponse();
 
     [HttpGet("conversations/{conversationId:guid}")]
     [AllowAnonymous]
-    public async Task<IActionResult> GetConversationById(Guid conversationId, CancellationToken ct) => (await _sender.Send(new GetMessagesQuery(conversationId), ct)).ToApiResponse();
+    public async Task<IActionResult> GetConversationById(Guid conversationId, [FromHeader(Name = "X-Guest-Id")] string? guestId, CancellationToken ct)
+        => (await _sender.Send(ReadQuery(conversationId, guestId), ct)).ToApiResponse();
+
+    private GetMessagesQuery ReadQuery(Guid conversationId, string? guestId)
+    {
+        var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User.FindFirst("sub")?.Value ?? User.FindFirst("nameid")?.Value;
+        var userId = userIdStr is not null && Guid.TryParse(userIdStr, out var id) ? (Guid?)id : null;
+        var isStaff = User.IsInRole("Admin") || User.IsInRole("StoreManager") || User.IsInRole("SalesEmployee");
+        return new GetMessagesQuery(conversationId, userId, guestId, isStaff);
+    }
 
     [HttpPost("send")]
     [AllowAnonymous]

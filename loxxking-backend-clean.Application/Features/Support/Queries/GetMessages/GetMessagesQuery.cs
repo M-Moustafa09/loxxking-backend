@@ -1,6 +1,7 @@
 namespace loxxking_backend_clean.Application.Features.Support.Queries.GetMessages;
 
-public record GetMessagesQuery(Guid ConversationId) : IRequest<Result<List<GetMessagesResponse>>>;
+/// <summary>The caller is checked against the conversation (see SupportConversationAccess).</summary>
+public record GetMessagesQuery(Guid ConversationId, Guid? UserId, string? GuestId, bool IsStaff) : IRequest<Result<List<GetMessagesResponse>>>;
 
 public record GetMessagesResponse(
     Guid Id,

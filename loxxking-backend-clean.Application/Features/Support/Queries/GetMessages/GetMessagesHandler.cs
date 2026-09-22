@@ -11,6 +11,10 @@ public class GetMessagesHandler : IRequestHandler<GetMessagesQuery, Result<List<
 
     public async Task<Result<List<GetMessagesResponse>>> Handle(GetMessagesQuery request, CancellationToken cancellationToken)
     {
+        // Not the caller's conversation: answer as if it did not exist, without saying whose it is.
+        if (!await SupportConversationAccess.CanReadAsync(_context, request.ConversationId, request.UserId, request.GuestId, request.IsStaff, cancellationToken))
+            return Result.Failure<List<GetMessagesResponse>>(new Error("Error.NotFound", "Conversation not found"));
+
         var messages = await _context.SupportMessages
             .Where(sm => sm.ConversationId == request.ConversationId)
             .OrderBy(sm => sm.CreatedAt)
