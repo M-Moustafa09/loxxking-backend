@@ -65,7 +65,9 @@ namespace loxxking_backend_clean.Infrastructure.Migrations
             // 2. Every other row — countries created automatically from visitors' IPs, and the
             //    duplicates that created — is switched off, not deleted (orders and visits keep it).
             // 3. The price every existing product had (in EGP) becomes its Egypt price.
-            migrationBuilder.Sql(@"
+            // EXEC = its own batch. The idempotent deploy script runs the whole migration as ONE batch, and
+            // SQL Server compiles a batch before the columns added above exist ("Invalid column name").
+            migrationBuilder.Sql("EXEC(N'" + (@"
 DECLARE @Wanted TABLE (Code nvarchar(2), Name nvarchar(100), NameAr nvarchar(100), Currency nvarchar(10), Aliases nvarchar(400));
 INSERT INTO @Wanted VALUES
  (N'IQ', N'Iraq',                 N'العراق',     N'IQD', N'|Iraq|'),
@@ -116,7 +118,7 @@ WHERE @Egypt IS NOT NULL
 UPDATE pp SET OriginalPrice = p.OriginalPrice
 FROM ProductPrices pp JOIN Products p ON p.Id = pp.ProductId
 WHERE pp.CountryId = @Egypt AND pp.OriginalPrice IS NULL AND p.OriginalPrice > pp.Price;
-");
+").Replace("'", "''") + "');");
         }
 
         /// <inheritdoc />
