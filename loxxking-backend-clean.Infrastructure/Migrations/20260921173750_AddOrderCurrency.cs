@@ -21,7 +21,9 @@ namespace loxxking_backend_clean.Infrastructure.Migrations
             // Orders placed before this were all priced in one number, saved against their country;
             // label them with that country's currency (almost all are Egypt / EGP, since checkout
             // saved every guest order as Egypt).
-            migrationBuilder.Sql(@"UPDATE o SET Currency = c.Currency FROM Orders o JOIN Countries c ON c.Id = o.CountryId WHERE o.Currency = N'';");
+            // EXEC = its own batch. The idempotent deploy script runs the whole migration as ONE batch, and
+            // SQL Server compiles a batch before the columns added above exist ("Invalid column name").
+            migrationBuilder.Sql("EXEC(N'" + (@"UPDATE o SET Currency = c.Currency FROM Orders o JOIN Countries c ON c.Id = o.CountryId WHERE o.Currency = N'';").Replace("'", "''") + "');");
         }
 
         /// <inheritdoc />
