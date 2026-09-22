@@ -208,6 +208,13 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapHub<loxxking_backend_clean.Api.Hubs.ChatHub>("/chatHub");
 
+// An /api address no controller answers is a 404, not the Angular app: the SPA fallback below used to
+// answer it with index.html (200, text/html), so the client's JSON parse failed and showed the red
+// «unexpected server error» toast, and the real mistake never looked like a missing endpoint.
+// Its literal "api" segment outranks the catch-all below; real endpoints outrank both.
+app.MapFallback("api/{**path}", (HttpContext context) =>
+    Results.Json(new { success = false, message = "Not found" }, statusCode: StatusCodes.Status404NotFound));
+
 app.MapFallbackToFile("index.html", new StaticFileOptions
 {
     OnPrepareResponse = ctx =>
