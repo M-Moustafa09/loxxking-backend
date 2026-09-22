@@ -121,6 +121,24 @@
   <data name="Product_VideoFormat" xml:space="preserve">
     <value>The video must be an MP4 or WebM file.</value>
   </data>
+  <data name="Product_InternationalPriceRequired" xml:space="preserve">
+    <value>The international USD price is required and must be greater than zero.</value>
+  </data>
+  <data name="Product_CountryPriceInvalid" xml:space="preserve">
+    <value>A country price must be greater than zero, and the price before discount greater than the price.</value>
+  </data>
+  <data name="Product_CountryNotSold" xml:space="preserve">
+    <value>One of the selected countries is not one of the store's countries.</value>
+  </data>
+  <data name="Product_CountryPriceDuplicate" xml:space="preserve">
+    <value>A country can only have one price.</value>
+  </data>
+  <data name="Order_CountryNotSold" xml:space="preserve">
+    <value>Choose a delivery country from the available countries.</value>
+  </data>
+  <data name="Order_ProductNotSoldInCountry" xml:space="preserve">
+    <value>One of the products in the cart is not available in the chosen country.</value>
+  </data>
   <data name="Product_VideoTooLarge" xml:space="preserve">
     <value>The video is larger than 30 MB. Compress it and try again.</value>
   </data>

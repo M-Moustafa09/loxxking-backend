@@ -14,6 +14,8 @@ public class CrmOrderSyncDto
     public string? Notes { get; set; }
     public string PaymentMethod { get; set; } = string.Empty;
     public decimal TotalAmount { get; set; }
+    // ISO currency of TotalAmount and every UnitPrice: the order country's (per-country pricing).
+    public string Currency { get; set; } = string.Empty;
     public List<CrmOrderItemSyncDto> Items { get; set; } = new();
     public DateTime CreatedAt { get; set; }
 }

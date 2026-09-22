@@ -31,6 +31,12 @@ public class CreateProductHandler : IRequestHandler<CreateProductCommand, Result
             return Result.Failure<CreateProductResponse>(new Error("Error.Validation", "Product_CodeInUse"));
         }
 
+        var priceError = ProductCountryPrices.ValidateInternational(request.BasePrice, request.InternationalOriginalPrice);
+        if (priceError != null)
+        {
+            return Result.Failure<CreateProductResponse>(priceError);
+        }
+
         var imageUrls = new List<string>();
         if (request.Images != null)
         {
@@ -74,8 +80,16 @@ public class CreateProductHandler : IRequestHandler<CreateProductCommand, Result
 
         // Luxira/CRM product code, chosen from the dashboard dropdown (G3.1).
         product.SetProductCode(request.ProductCode);
+        product.SetInternationalPrice(request.BasePrice, request.InternationalOriginalPrice);
 
         _context.Products.Add(product);
+
+        var countryPriceError = await ProductCountryPrices.ReplaceAsync(_context, product.Id, request.CountryPrices, cancellationToken);
+        if (countryPriceError != null)
+        {
+            return Result.Failure<CreateProductResponse>(countryPriceError);
+        }
+
         await _context.SaveChangesAsync(cancellationToken);
 
         await _cache.RemoveAsync("ProductsList_v2_", cancellationToken);

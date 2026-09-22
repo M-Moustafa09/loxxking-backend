@@ -12,7 +12,11 @@ public record UpdateProductCommand(
     string? ShippingPolicy,
     string? ReturnPolicy,
     decimal BasePrice,
-    string? ProductCode = null
+    string? ProductCode = null,
+    // Per-country pricing (2026-09-21): BasePrice is the international USD price. CountryPrices
+    // replaces the product's whole set; null leaves the stored prices untouched.
+    decimal? InternationalOriginalPrice = null,
+    List<CountryPriceInput>? CountryPrices = null
 ) : IRequest<Result>;
 
 public class UpdateProductHandler : IRequestHandler<UpdateProductCommand, Result>
@@ -34,6 +38,12 @@ public class UpdateProductHandler : IRequestHandler<UpdateProductCommand, Result
         if (product == null) return Result.Failure(new Error("Error.NotFound", "Product_NotFound"));
         if (await ProductCodeGuard.IsTakenAsync(_context, request.ProductCode, product.Id, cancellationToken))
             return Result.Failure(new Error("Error.Validation", "Product_CodeInUse"));
+
+        var priceError = ProductCountryPrices.ValidateInternational(request.BasePrice, request.InternationalOriginalPrice);
+        if (priceError != null) return Result.Failure(priceError);
+
+        var countryPriceError = await ProductCountryPrices.ReplaceAsync(_context, product.Id, request.CountryPrices, cancellationToken);
+        if (countryPriceError != null) return Result.Failure(countryPriceError);
 
         var imageUrls = new List<string>();
         if (request.Images != null)
@@ -83,6 +93,7 @@ public class UpdateProductHandler : IRequestHandler<UpdateProductCommand, Result
         // Luxira/CRM product code, chosen from the dashboard dropdown (G3.1). This command is a full
         // replace (like the fields above), and the dashboard form submits the current code.
         product.SetProductCode(request.ProductCode);
+        product.SetInternationalPrice(request.BasePrice, request.InternationalOriginalPrice);
 
         _context.Products.Update(product);
         await _context.SaveChangesAsync(cancellationToken);
@@ -91,6 +102,9 @@ public class UpdateProductHandler : IRequestHandler<UpdateProductCommand, Result
         await _cache.RemoveAsync($"ProductsList_v2_{product.CategoryId}", cancellationToken);
         await _cache.RemoveAsync($"ProductDetail_{product.Id}_ar", cancellationToken);
         await _cache.RemoveAsync($"ProductDetail_{product.Id}_en", cancellationToken);
+        // The product page is read by slug too; it carries the prices, so it must not keep old ones.
+        await _cache.RemoveAsync($"ProductDetail_Slug_{product.Slug}_ar", cancellationToken);
+        await _cache.RemoveAsync($"ProductDetail_Slug_{product.Slug}_en", cancellationToken);
 
         return Result.Success();
     }

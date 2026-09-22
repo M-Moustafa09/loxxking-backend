@@ -110,6 +110,7 @@ public class OrderSyncBackgroundService : BackgroundService
                 Notes = order.Notes,
                 PaymentMethod = order.PaymentMethod.ToString(),
                 TotalAmount = order.TotalAmount.Value,
+                Currency = order.Currency,
                 CreatedAt = order.CreatedAt,
                 Items = order.OrderItems.Select(i => new CrmOrderItemSyncDto
                 {

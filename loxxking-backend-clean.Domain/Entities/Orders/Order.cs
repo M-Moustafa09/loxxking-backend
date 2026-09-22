@@ -21,6 +21,12 @@ public class Order : BaseEntity {
     public string? GuestPhone { get; private set; }
     public string? GuestAddress { get; private set; }
     public Money TotalAmount { get; private set; } = Money.Zero;
+
+    /// <summary>
+    /// ISO currency of every amount on this order (lines and total): the order country's currency,
+    /// since each line is priced at that country's price (per-country pricing, 2026-09-21).
+    /// </summary>
+    public string Currency { get; private set; } = string.Empty;
     
     public string City { get; private set; } = string.Empty;
     public string Area { get; private set; } = string.Empty;
@@ -50,7 +56,8 @@ public class Order : BaseEntity {
         PaymentMethod paymentMethod,
         string? guestName = null,
         string? guestPhone = null,
-        string? guestAddress = null)
+        string? guestAddress = null,
+        string currency = "")
     {
         return new Order
         {
@@ -68,6 +75,7 @@ public class Order : BaseEntity {
             GuestName = guestName,
             GuestPhone = guestPhone,
             GuestAddress = guestAddress,
+            Currency = currency,
             IsSynced = false
         };
     }
