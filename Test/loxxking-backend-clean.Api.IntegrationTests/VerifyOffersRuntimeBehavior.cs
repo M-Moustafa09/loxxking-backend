@@ -92,7 +92,7 @@ public class VerifyOffersRuntimeBehavior
         var healedOffer = await db.Offers.FindAsync(corruptedOffer.Id);
         Assert.Equal(50m, healedOffer!.Discount.Value);
 
-        var createBundleHandler = new CreateBundleOfferHandler(db, GetCache());
+        var createBundleHandler = new CreateBundleOfferHandler(db);
         var createCmd = new CreateBundleOfferCommand("New", "Sub", 0m, "img", DateTime.UtcNow, DateTime.UtcNow.AddDays(1), new List<BundleItemDto> { new BundleItemDto(product.Id, 1) });
         var createResult = await createBundleHandler.Handle(createCmd, CancellationToken.None);
         
@@ -100,7 +100,7 @@ public class VerifyOffersRuntimeBehavior
         var savedNewBundle = await db.BundleOffers.FindAsync(createResult.Value);
         Assert.Equal(0m, savedNewBundle!.BundlePrice.Value);
 
-        var createOfferHandler = new CreateOfferHandler(db, null!);
+        var createOfferHandler = new CreateOfferHandler(db);
         var badCreateOfferCmd = new CreateOfferCommand(product.Id, 110m, DateTime.UtcNow, DateTime.UtcNow.AddDays(1));
         await Assert.ThrowsAsync<ArgumentException>(() => createOfferHandler.Handle(badCreateOfferCmd, CancellationToken.None));
 

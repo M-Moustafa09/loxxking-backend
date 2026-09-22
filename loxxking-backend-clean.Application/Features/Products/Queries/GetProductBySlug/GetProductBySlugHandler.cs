@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Caching.Distributed;
+using loxxking_backend_clean.Application.Common.Caching;
 using System.Text.Json;
 using loxxking_backend_clean.Application.Features.Products.Queries.GetProduct;
 
@@ -18,7 +19,7 @@ public class GetProductBySlugHandler : IRequestHandler<GetProductBySlugQuery, Re
     public async Task<Result<GetProductResponse>> Handle(GetProductBySlugQuery request, CancellationToken cancellationToken)
     {
         var lang = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
-        var cacheKey = $"ProductDetail_Slug_{request.Slug}_{lang}";
+        var cacheKey = await CatalogCache.KeyAsync(_cache, $"ProductDetail_Slug_{request.Slug}_{lang}", cancellationToken);
 
         var cachedData = await _cache.GetStringAsync(cacheKey, cancellationToken);
         if (!string.IsNullOrEmpty(cachedData))

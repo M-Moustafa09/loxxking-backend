@@ -95,7 +95,9 @@ public class ApplicationDbContext : IdentityDbContext<User, IdentityRole<Guid>, 
 
         builder.ApplyConfigurationsFromAssembly(Assembly.GetExecutingAssembly());
 
-        foreach (var relationship in builder.Model.GetEntityTypes().SelectMany(e => e.GetForeignKeys()))
+        // Not the owned values (an offer's or a bundle's ActivePeriod): they live in their owner's row, and
+        // Restrict on them made every offer and bundle delete throw before it reached the database.
+        foreach (var relationship in builder.Model.GetEntityTypes().SelectMany(e => e.GetForeignKeys()).Where(fk => !fk.IsOwnership))
         {
             relationship.DeleteBehavior = DeleteBehavior.Restrict;
         }

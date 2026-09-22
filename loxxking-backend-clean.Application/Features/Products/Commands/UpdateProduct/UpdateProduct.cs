@@ -1,5 +1,3 @@
-using Microsoft.Extensions.Caching.Distributed;
-
 namespace loxxking_backend_clean.Application.Features.Products.Commands.UpdateProduct;
 
 public record UpdateProductCommand(
@@ -23,13 +21,11 @@ public class UpdateProductHandler : IRequestHandler<UpdateProductCommand, Result
 {
     private readonly IApplicationDbContext _context;
     private readonly IFileStorageService _fileStorageService;
-    private readonly IDistributedCache _cache;
 
-    public UpdateProductHandler(IApplicationDbContext context, IFileStorageService fileStorageService, IDistributedCache cache) 
+    public UpdateProductHandler(IApplicationDbContext context, IFileStorageService fileStorageService) 
     { 
         _context = context; 
         _fileStorageService = fileStorageService;
-        _cache = cache;
     }
 
     public async Task<Result> Handle(UpdateProductCommand request, CancellationToken cancellationToken)
@@ -97,14 +93,6 @@ public class UpdateProductHandler : IRequestHandler<UpdateProductCommand, Result
 
         _context.Products.Update(product);
         await _context.SaveChangesAsync(cancellationToken);
-
-        await _cache.RemoveAsync("ProductsList_v2_", cancellationToken);
-        await _cache.RemoveAsync($"ProductsList_v2_{product.CategoryId}", cancellationToken);
-        await _cache.RemoveAsync($"ProductDetail_{product.Id}_ar", cancellationToken);
-        await _cache.RemoveAsync($"ProductDetail_{product.Id}_en", cancellationToken);
-        // The product page is read by slug too; it carries the prices, so it must not keep old ones.
-        await _cache.RemoveAsync($"ProductDetail_Slug_{product.Slug}_ar", cancellationToken);
-        await _cache.RemoveAsync($"ProductDetail_Slug_{product.Slug}_en", cancellationToken);
 
         return Result.Success();
     }

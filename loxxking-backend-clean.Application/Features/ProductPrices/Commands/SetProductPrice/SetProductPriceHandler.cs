@@ -1,17 +1,14 @@
 using loxxking_backend_clean.Domain.Entities.Products;
-using Microsoft.Extensions.Caching.Distributed;
 
 namespace loxxking_backend_clean.Application.Features.ProductPrices.Commands.SetProductPrice;
 
 public class SetProductPriceHandler : IRequestHandler<SetProductPriceCommand, Result>
 {
     private readonly IApplicationDbContext _context;
-    private readonly IDistributedCache _cache;
 
-    public SetProductPriceHandler(IApplicationDbContext context, IDistributedCache cache)
+    public SetProductPriceHandler(IApplicationDbContext context)
     {
         _context = context;
-        _cache = cache;
     }
 
     public async Task<Result> Handle(SetProductPriceCommand request, CancellationToken cancellationToken)
@@ -37,11 +34,6 @@ public class SetProductPriceHandler : IRequestHandler<SetProductPriceCommand, Re
         }
 
         await _context.SaveChangesAsync(cancellationToken);
-        
-        await _cache.RemoveAsync($"ProductPrices_{request.ProductId}", cancellationToken);
-        await _cache.RemoveAsync($"ProductDetail_{request.ProductId}_ar", cancellationToken);
-        await _cache.RemoveAsync($"ProductDetail_{request.ProductId}_en", cancellationToken);
-        await _cache.RemoveAsync($"ProductPrice_Country_{request.ProductId}_{request.CountryId}", cancellationToken);
         
         return Result.Success();
     }

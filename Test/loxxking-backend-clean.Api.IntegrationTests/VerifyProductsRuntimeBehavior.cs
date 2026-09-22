@@ -40,7 +40,7 @@ public class VerifyProductsRuntimeBehavior
         db.Categories.Add(category);
         await db.SaveChangesAsync();
 
-        var createHandler = new CreateProductHandler(db, null!, GetCache());
+        var createHandler = new CreateProductHandler(db, null!);
         var createCmd = new CreateProductCommand(
             category.Id,
             "ProdAr",
@@ -64,7 +64,7 @@ public class VerifyProductsRuntimeBehavior
         Assert.Null(getResult.Value.OriginalPrice);
         Assert.StartsWith("proden-", getResult.Value.Slug);
         
-        var updateHandler = new UpdateProductHandler(db, null!, GetCache());
+        var updateHandler = new UpdateProductHandler(db, null!);
         var badUpdateCmd = new UpdateProductCommand(
             createResult.Value.Id,
             "ProdAr Updated",

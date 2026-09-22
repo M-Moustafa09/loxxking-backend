@@ -1,5 +1,4 @@
 using loxxking_backend_clean.Domain.Entities.Products;
-using Microsoft.Extensions.Caching.Distributed;
 
 namespace loxxking_backend_clean.Application.Features.Products.Commands.CreateProduct;
 
@@ -7,13 +6,11 @@ public class CreateProductHandler : IRequestHandler<CreateProductCommand, Result
 {
     private readonly IApplicationDbContext _context;
     private readonly IFileStorageService _fileStorageService;
-    private readonly IDistributedCache _cache;
 
-    public CreateProductHandler(IApplicationDbContext context, IFileStorageService fileStorageService, IDistributedCache cache)
+    public CreateProductHandler(IApplicationDbContext context, IFileStorageService fileStorageService)
     {
         _context = context;
         _fileStorageService = fileStorageService;
-        _cache = cache;
     }
 
     public async Task<Result<CreateProductResponse>> Handle(CreateProductCommand request, CancellationToken cancellationToken)
@@ -91,9 +88,6 @@ public class CreateProductHandler : IRequestHandler<CreateProductCommand, Result
         }
 
         await _context.SaveChangesAsync(cancellationToken);
-
-        await _cache.RemoveAsync("ProductsList_v2_", cancellationToken);
-        await _cache.RemoveAsync($"ProductsList_v2_{product.CategoryId}", cancellationToken);
 
         return Result.Success(new CreateProductResponse(product.Id));
     }

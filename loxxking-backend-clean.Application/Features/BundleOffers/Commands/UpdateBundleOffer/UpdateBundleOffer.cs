@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Caching.Distributed;
 using loxxking_backend_clean.Domain.Entities.Offers;
 using loxxking_backend_clean.Application.Features.BundleOffers.Commands.CreateBundleOffer;
 
@@ -18,12 +17,10 @@ public record UpdateBundleOfferCommand(
 public class UpdateBundleOfferHandler : IRequestHandler<UpdateBundleOfferCommand, Result>
 {
     private readonly IApplicationDbContext _context;
-    private readonly IDistributedCache _cache;
 
-    public UpdateBundleOfferHandler(IApplicationDbContext context, IDistributedCache cache)
+    public UpdateBundleOfferHandler(IApplicationDbContext context)
     {
         _context = context;
-        _cache = cache;
     }
 
     public async Task<Result> Handle(UpdateBundleOfferCommand request, CancellationToken cancellationToken)
@@ -55,11 +52,6 @@ public class UpdateBundleOfferHandler : IRequestHandler<UpdateBundleOfferCommand
 
         _context.BundleOffers.Update(offer);
         await _context.SaveChangesAsync(cancellationToken);
-
-        await _cache.RemoveAsync("BundleOffers_ar_True", cancellationToken);
-        await _cache.RemoveAsync("BundleOffers_ar_False", cancellationToken);
-        await _cache.RemoveAsync("BundleOffers_en_True", cancellationToken);
-        await _cache.RemoveAsync("BundleOffers_en_False", cancellationToken);
 
         return Result.Success();
     }

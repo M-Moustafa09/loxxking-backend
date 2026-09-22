@@ -1,18 +1,14 @@
 using loxxking_backend_clean.Domain.Entities.Offers;
-using Microsoft.Extensions.Caching.Distributed;
 
 namespace loxxking_backend_clean.Application.Features.Offers.Commands.CreateOffer;
 
 public class CreateOfferHandler : IRequestHandler<CreateOfferCommand, Result<CreateOfferResponse>>
 {
     private readonly IApplicationDbContext _context;
-    private readonly IDistributedCache _cache;
-    private const string ActiveOffersCacheKey = "offers:active";
 
-    public CreateOfferHandler(IApplicationDbContext context, IDistributedCache cache)
+    public CreateOfferHandler(IApplicationDbContext context)
     {
         _context = context;
-        _cache = cache;
     }
 
     public async Task<Result<CreateOfferResponse>> Handle(CreateOfferCommand request, CancellationToken cancellationToken)
@@ -31,8 +27,6 @@ public class CreateOfferHandler : IRequestHandler<CreateOfferCommand, Result<Cre
 
         _context.Offers.Add(offer);
         await _context.SaveChangesAsync(cancellationToken);
-
-        await _cache.RemoveAsync(ActiveOffersCacheKey, cancellationToken);
 
         return Result.Success(new CreateOfferResponse(offer.Id));
     }
