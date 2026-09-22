@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Caching.Distributed;
 using loxxking_backend_clean.Application.Common.Caching;
 using System.Text.Json;
+using loxxking_backend_clean.Application.Features.Offers;
 using loxxking_backend_clean.Application.Features.Products.Queries.GetProduct;
 
 namespace loxxking_backend_clean.Application.Features.Products.Queries.GetProductBySlug;
@@ -25,7 +26,7 @@ public class GetProductBySlugHandler : IRequestHandler<GetProductBySlugQuery, Re
         if (!string.IsNullOrEmpty(cachedData))
         {
             var cachedProduct = JsonSerializer.Deserialize<GetProductResponse>(cachedData);
-            if (cachedProduct != null) return Result.Success(cachedProduct);
+            if (cachedProduct != null) return Result.Success(cachedProduct.WithOffer(await ActiveOffers.GetAsync(_context, _cache, cancellationToken)));
         }
 
         var product = await _context.Products
@@ -67,6 +68,6 @@ public class GetProductBySlugHandler : IRequestHandler<GetProductBySlugQuery, Re
         var options = new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30) };
         await _cache.SetStringAsync(cacheKey, JsonSerializer.Serialize(response), options, cancellationToken);
 
-        return Result.Success(response);
+        return Result.Success(response.WithOffer(await ActiveOffers.GetAsync(_context, _cache, cancellationToken)));
     }
 }

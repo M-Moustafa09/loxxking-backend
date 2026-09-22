@@ -2,6 +2,7 @@ using loxxking_backend_clean.Application.Features.Offers.Commands.CreateOffer;
 using loxxking_backend_clean.Application.Features.Offers.Commands.DeleteOffer;
 using loxxking_backend_clean.Application.Features.Offers.Commands.UpdateOffer;
 using loxxking_backend_clean.Application.Features.Offers.Queries.GetOfferById;
+using loxxking_backend_clean.Application.Features.Offers.Queries.GetManagedOffers;
 using loxxking_backend_clean.Application.Features.Offers.Queries.GetOffers;
 
 namespace loxxking_backend_clean.Api.Controllers;
@@ -15,6 +16,11 @@ public class OffersController : ControllerBase
 
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] bool activeOnly, CancellationToken ct) => (await _sender.Send(new GetOffersQuery(activeOnly), ct)).ToApiResponse();
+
+    // The dashboard's «إدارة العروض» list: every offer with its own id, running or not.
+    [HttpGet("manage")]
+    [Authorize(Roles = "Admin,StoreManager")]
+    public async Task<IActionResult> GetManaged(CancellationToken ct) => (await _sender.Send(new GetManagedOffersQuery(), ct)).ToApiResponse();
 
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct) => (await _sender.Send(new GetOfferByIdQuery(id), ct)).ToApiResponse();

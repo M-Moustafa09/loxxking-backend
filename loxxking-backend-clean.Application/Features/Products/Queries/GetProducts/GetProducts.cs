@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Caching.Distributed;
 using loxxking_backend_clean.Application.Common.Caching;
 using System.Text.Json;
+using loxxking_backend_clean.Application.Features.Offers;
 
 namespace loxxking_backend_clean.Application.Features.Products.Queries.GetProducts;
 
@@ -39,7 +40,11 @@ public record ProductListResponse(
     // the storefront shows the visitor's country price, else the international USD price.
     decimal? InternationalPrice = null,
     decimal? InternationalOriginalPrice = null,
-    List<CountryPriceDto>? CountryPrices = null
+    List<CountryPriceDto>? CountryPrices = null,
+    // The running offer (2026-09-22), laid over the cached response on every read (ActiveOffers):
+    // the storefront takes OfferPercent off the visitor's price. The prices above stay undiscounted.
+    decimal? OfferPercent = null,
+    DateTime? OfferEndsAt = null
 );
 
 public class GetProductsHandler : IRequestHandler<GetProductsQuery, Result<List<ProductListResponse>>>
@@ -112,6 +117,7 @@ public class GetProductsHandler : IRequestHandler<GetProductsQuery, Result<List<
             await _cache.SetStringAsync(cacheKey, JsonSerializer.Serialize(products), options, cancellationToken);
         }
         
-        return Result.Success(products);
+        var offers = await ActiveOffers.GetAsync(_context, _cache, cancellationToken);
+        return Result.Success(products.Select(p => p.WithOffer(offers)).ToList());
     }
 }

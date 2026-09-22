@@ -206,7 +206,13 @@
     <value>EndDate must be after StartDate.</value>
   </data>
   <data name="Offer_DiscountPercentRange" xml:space="preserve">
-    <value>DiscountPercent must be between 0 and 100.</value>
+    <value>The discount must be above 0% and below 100%.</value>
+  </data>
+  <data name="Offer_EndDateInPast" xml:space="preserve">
+    <value>The offer end date has already passed.</value>
+  </data>
+  <data name="Offer_PeriodOverlaps" xml:space="preserve">
+    <value>This product already has an offer during this period. A product can have only one offer at a time.</value>
   </data>
   <data name="BundleOffer_NotFound" xml:space="preserve">
     <value>BundleOffer not found.</value>
