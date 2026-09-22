@@ -206,7 +206,13 @@
     <value>يجب أن يكون تاريخ الانتهاء بعد تاريخ البدء.</value>
   </data>
   <data name="Offer_DiscountPercentRange" xml:space="preserve">
-    <value>يجب أن تكون نسبة الخصم بين 0 و 100.</value>
+    <value>نسبة الخصم يجب أن تكون أكبر من 0% وأقل من 100%.</value>
+  </data>
+  <data name="Offer_EndDateInPast" xml:space="preserve">
+    <value>تاريخ نهاية العرض مضى بالفعل.</value>
+  </data>
+  <data name="Offer_PeriodOverlaps" xml:space="preserve">
+    <value>هذا المنتج عليه عرض آخر في نفس الفترة. المنتج الواحد له عرض واحد فقط في نفس الوقت.</value>
   </data>
   <data name="BundleOffer_NotFound" xml:space="preserve">
     <value>الباقة غير موجودة.</value>

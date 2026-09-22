@@ -1,6 +1,7 @@
 using loxxking_backend_clean.Domain.Entities.Orders;
 using loxxking_backend_clean.Domain.Entities.Invoices;
 using loxxking_backend_clean.Domain.Entities.Inventory;
+using loxxking_backend_clean.Application.Features.Offers;
 
 namespace loxxking_backend_clean.Application.Features.Orders.Commands.CreateOrder;
 
@@ -83,6 +84,10 @@ public class CreateOrderHandler : IRequestHandler<CreateOrderCommand, Result<Cre
                 request.Area
             );
 
+            // A running offer takes its percentage off the country price (owner decision 2026-09-22),
+            // read from the same place the storefront shows it from, so the customer pays what they saw.
+            var offers = await ActiveOffers.GetAsync(_context, _cache, cancellationToken);
+
             using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
 
             foreach (var itemDto in request.Items)
@@ -93,6 +98,8 @@ public class CreateOrderHandler : IRequestHandler<CreateOrderCommand, Result<Cre
                 var countryPrice = await CountryPriceAsync(product.Id, finalCountryId.Value, cancellationToken);
                 if (countryPrice is not decimal price)
                     return Result.Failure<CreateOrderResponse>(new Error("Error.Validation", "Order_ProductNotSoldInCountry"));
+                if (offers.TryGetValue(product.Id, out var offer))
+                    price = ActiveOffers.Apply(price, offer.Percent);
                 
                 var inventoryResult = await DecrementInventoryAsync(product.Id, finalCountryId.Value, itemDto.Quantity, product.NameEn, cancellationToken);
                 if (inventoryResult.IsFailure) return Result.Failure<CreateOrderResponse>(inventoryResult.Error);

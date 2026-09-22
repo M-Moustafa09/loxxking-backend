@@ -19,11 +19,14 @@ public class CreateOfferHandler : IRequestHandler<CreateOfferCommand, Result<Cre
             return Result.Failure<CreateOfferResponse>(new Error("Error.Validation", "Offer_InvalidProduct"));
         }
 
-        var offer = Offer.Create(
-            request.ProductId,
-            loxxking_backend_clean.Domain.ValueObjects.Percentage.FromDecimal(request.DiscountPercent),
-            loxxking_backend_clean.Domain.ValueObjects.DateRange.Create(request.StartDate, request.EndDate)
-        );
+        // The screen sends the admin's local time as UTC ("Z"); the columns and every comparison are UTC.
+        var discount = loxxking_backend_clean.Domain.ValueObjects.Percentage.FromDecimal(request.DiscountPercent);
+        var period = loxxking_backend_clean.Domain.ValueObjects.DateRange.Create(request.StartDate.ToUniversalTime(), request.EndDate.ToUniversalTime());
+
+        var periodError = await OfferPeriodGuard.CheckAsync(_context, request.ProductId, period.StartDate, period.EndDate, null, cancellationToken);
+        if (periodError is not null) return Result.Failure<CreateOfferResponse>(periodError);
+
+        var offer = Offer.Create(request.ProductId, discount, period);
 
         _context.Offers.Add(offer);
         await _context.SaveChangesAsync(cancellationToken);

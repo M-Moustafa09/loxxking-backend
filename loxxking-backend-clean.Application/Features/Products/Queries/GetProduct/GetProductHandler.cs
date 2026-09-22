@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Caching.Distributed;
 using loxxking_backend_clean.Application.Common.Caching;
 using System.Text.Json;
+using loxxking_backend_clean.Application.Features.Offers;
 
 namespace loxxking_backend_clean.Application.Features.Products.Queries.GetProduct;
 
@@ -24,7 +25,7 @@ public class GetProductHandler : IRequestHandler<GetProductQuery, Result<GetProd
         if (!string.IsNullOrEmpty(cachedData))
         {
             var cachedProduct = JsonSerializer.Deserialize<GetProductResponse>(cachedData);
-            if (cachedProduct != null) return Result.Success(cachedProduct);
+            if (cachedProduct != null) return Result.Success(cachedProduct.WithOffer(await ActiveOffers.GetAsync(_context, _cache, cancellationToken)));
         }
 
         var product = await _context.Products
@@ -66,6 +67,6 @@ public class GetProductHandler : IRequestHandler<GetProductQuery, Result<GetProd
         var options = new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30) };
         await _cache.SetStringAsync(cacheKey, JsonSerializer.Serialize(response), options, cancellationToken);
 
-        return Result.Success(response);
+        return Result.Success(response.WithOffer(await ActiveOffers.GetAsync(_context, _cache, cancellationToken)));
     }
 }

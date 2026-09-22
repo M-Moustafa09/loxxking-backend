@@ -4,7 +4,6 @@ using loxxking_backend_clean.Infrastructure.Persistence.Seeder.Configs;
 using loxxking_backend_clean.Infrastructure.Persistence.Seeder.Countries;
 using loxxking_backend_clean.Infrastructure.Persistence.Seeder.Favorites;
 using loxxking_backend_clean.Infrastructure.Persistence.Seeder.Notifications;
-using loxxking_backend_clean.Infrastructure.Persistence.Seeder.Offers;
 using loxxking_backend_clean.Infrastructure.Persistence.Seeder.Orders;
 using loxxking_backend_clean.Infrastructure.Persistence.Seeder.Products;
 using loxxking_backend_clean.Infrastructure.Persistence.Seeder.Reviews;
@@ -26,7 +25,6 @@ public static class SeederExtensions
         services.AddScoped<IDataSeeder, CategorySeeder>();
         services.AddScoped<IDataSeeder, ProductSeeder>();
         services.AddScoped<IDataSeeder, PageConfigSeeder>();
-        services.AddScoped<IDataSeeder, OfferSeeder>();
         services.AddScoped<IDataSeeder, OrderSeeder>();
         services.AddScoped<IDataSeeder, ReviewSeeder>();
         services.AddScoped<IDataSeeder, FavoriteSeeder>();
