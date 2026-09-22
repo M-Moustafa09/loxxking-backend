@@ -207,6 +207,7 @@ app.UseAuthorization();
 
 app.MapControllers();
 app.MapHub<loxxking_backend_clean.Api.Hubs.ChatHub>("/chatHub");
+app.MapHub<loxxking_backend_clean.Api.Hubs.CatalogHub>("/catalogHub");
 
 // An /api address no controller answers is a 404, not the Angular app: the SPA fallback below used to
 // answer it with index.html (200, text/html), so the client's JSON parse failed and showed the red
