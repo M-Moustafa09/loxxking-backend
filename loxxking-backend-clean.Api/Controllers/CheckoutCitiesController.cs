@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using loxxking_backend_clean.Api.Common;
 using loxxking_backend_clean.Application.Common.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -61,7 +62,7 @@ public class CheckoutCitiesController : ControllerBase
     {
         var cacheKey = $"checkout-cities:{countryId}";
         if (_cache.TryGetValue(cacheKey, out List<string>? cached) && cached is not null)
-            return Ok(new { success = true, data = cached });
+            return Ok(Answer(cached));
 
         // The store's own country row gives the name the CRM already understands from the order
         // sync ("Saudi Arabia"), so no free string from the browser is forwarded.
@@ -72,12 +73,24 @@ public class CheckoutCitiesController : ControllerBase
                 .Select(c => c.Name)
                 .FirstOrDefaultAsync(ct);
         if (string.IsNullOrWhiteSpace(countryName))
-            return Ok(new { success = true, data = Array.Empty<string>() });
+            return Ok(Answer(new List<string>()));
 
         var cities = await FetchFromCrmAsync(countryName, ct);
         _cache.Set(cacheKey, cities ?? new List<string>(), cities is null ? FailureCacheFor : CacheFor);
-        return Ok(new { success = true, data = cities ?? new List<string>() });
+        return Ok(Answer(cities ?? new List<string>()));
     }
+
+    /// <summary>
+    /// <c>data</c> stays the plain Arabic list a cached older storefront reads; <c>items</c> adds the
+    /// English name for the storefront's language (null → show the Arabic). The order always carries
+    /// the Arabic <c>name</c>.
+    /// </summary>
+    private static object Answer(List<string> cities) => new
+    {
+        success = true,
+        data = cities,
+        items = cities.Select(c => new { name = c, nameEn = CheckoutCityEnglishNames.For(c) }),
+    };
 
     /// <summary>The CRM's cities for the country, or null when the CRM could not be read.</summary>
     private async Task<List<string>?> FetchFromCrmAsync(string countryName, CancellationToken ct)
