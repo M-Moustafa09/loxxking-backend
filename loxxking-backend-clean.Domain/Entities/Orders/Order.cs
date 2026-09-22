@@ -57,7 +57,9 @@ public class Order : BaseEntity {
         string? guestName = null,
         string? guestPhone = null,
         string? guestAddress = null,
-        string currency = "")
+        string currency = "",
+        string? city = null,
+        string? area = null)
     {
         return new Order
         {
@@ -76,6 +78,8 @@ public class Order : BaseEntity {
             GuestPhone = guestPhone,
             GuestAddress = guestAddress,
             Currency = currency,
+            City = (city ?? string.Empty).Trim(),
+            Area = (area ?? string.Empty).Trim(),
             IsSynced = false
         };
     }

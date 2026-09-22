@@ -220,5 +220,14 @@ public class VerifyOrdersRuntimeBehavior
         var noCountry = await handler.Handle(Order(null), CancellationToken.None);
         Assert.True(noCountry.IsFailure);
         Assert.Equal("Order_CountryNotSold", noCountry.Error.Message);
+
+        // City and area typed at checkout are kept on the order, trimmed (free text, 2026-09-22).
+        var typed = await handler.Handle(
+            Order(saudi.Id) with { City = "  الرياض ", Area = " حي النخيل " },
+            CancellationToken.None);
+        Assert.True(typed.IsSuccess);
+        var typedOrder = await db.Orders.FirstAsync(o => o.Id == typed.Value.OrderId);
+        Assert.Equal("الرياض", typedOrder.City);
+        Assert.Equal("حي النخيل", typedOrder.Area);
     }
 }

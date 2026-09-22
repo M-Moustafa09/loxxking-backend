@@ -78,7 +78,9 @@ public class CreateOrderHandler : IRequestHandler<CreateOrderCommand, Result<Cre
                 request.GuestName,
                 null, // guestPhone
                 null, // guestAddress
-                countryEntity.Currency
+                countryEntity.Currency,
+                request.City,
+                request.Area
             );
 
             using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
