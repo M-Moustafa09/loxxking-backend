@@ -19,6 +19,7 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.HasIndex(o => o.ShipmentCode).IsUnique();
         builder.HasIndex(o => new { o.CountryId, o.Status, o.PaymentMethod, o.CreatedAt });
         builder.Property(o => o.IsSynced).HasDefaultValue(false);
+        builder.Property(o => o.Currency).IsRequired().HasMaxLength(10);
         builder.HasIndex(o => o.IsSynced);
     }
 }

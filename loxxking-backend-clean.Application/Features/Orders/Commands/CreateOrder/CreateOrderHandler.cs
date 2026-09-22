@@ -32,8 +32,6 @@ public class CreateOrderHandler : IRequestHandler<CreateOrderCommand, Result<Cre
         if (request.Items == null || !request.Items.Any())
             return Result.Failure<CreateOrderResponse>(new Error("Error.Validation", "Order_EmptyItems"));
 
-        Guid? finalCountryId = null;
-
         var currentUserId = _currentUserService.UserId;
 
         if (currentUserId != Guid.Empty)
@@ -45,41 +43,19 @@ public class CreateOrderHandler : IRequestHandler<CreateOrderCommand, Result<Cre
             }
         }
 
-        if (request.CountryId.HasValue && request.CountryId.Value != Guid.Empty)
-        {
-            finalCountryId = request.CountryId.Value;
-        }
-        else if (currentUserId != Guid.Empty)
-        {
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == currentUserId, cancellationToken);
-            finalCountryId = user?.CountryId;
-        }
+        // The order country is the country whose prices the customer was shown and chose at
+        // checkout — one of the store's countries (per-country pricing, 2026-09-21). It is no longer
+        // guessed: checkout used to send a translation key as the country name, so every guest
+        // order fell through to the default country (Egypt). Each line is priced at that country's
+        // price and the order carries its currency.
+        var countryEntity = request.CountryId is Guid requestedCountryId && requestedCountryId != Guid.Empty
+            ? await _context.Countries.FirstOrDefaultAsync(c => c.Id == requestedCountryId && c.IsActive && !c.IsDeleted, cancellationToken)
+            : null;
+        if (countryEntity is null)
+            return Result.Failure<CreateOrderResponse>(new Error("Error.Validation", "Order_CountryNotSold"));
 
-        if (finalCountryId is null)
-        {
-            var geoCountryName = _currentUserService.GeoCountryName ?? request.GuestCountryName;
-            if (!string.IsNullOrWhiteSpace(geoCountryName))
-            {
-                var geoCountry = await _context.Countries
-                    .FirstOrDefaultAsync(c => c.Name.ToLower() == geoCountryName.ToLower(), cancellationToken);
-                finalCountryId = geoCountry?.Id;
-            }
-        }
-
-        if (finalCountryId is null)
-        {
-            var fallback = await _context.Countries
-                .OrderByDescending(c => c.IsDefault)
-                .ThenBy(c => c.CreatedAt)
-                .FirstOrDefaultAsync(cancellationToken);
-            finalCountryId = fallback?.Id;
-        }
-
-        if (finalCountryId is null)
-            return Result.Failure<CreateOrderResponse>(new Error("Error.Validation", "Order_CountryRequired"));
-
-        var countryEntity = await _context.Countries.FindAsync(new object?[] { finalCountryId.Value }, cancellationToken: cancellationToken);
-        var resolvedCountryName = countryEntity?.Name ?? "—";
+        Guid? finalCountryId = countryEntity.Id;
+        var resolvedCountryName = countryEntity.Name;
 
         Order order;
         Invoice invoice;
@@ -101,7 +77,8 @@ public class CreateOrderHandler : IRequestHandler<CreateOrderCommand, Result<Cre
                 request.PaymentMethod,
                 request.GuestName,
                 null, // guestPhone
-                null  // guestAddress
+                null, // guestAddress
+                countryEntity.Currency
             );
 
             using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
@@ -111,7 +88,9 @@ public class CreateOrderHandler : IRequestHandler<CreateOrderCommand, Result<Cre
                 var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == itemDto.ProductId, cancellationToken);
                 if (product == null) continue;
 
-                var price = await ApplyDynamicPricingAsync(product.Id, finalCountryId.Value, product.BasePrice.Value, cancellationToken);
+                var countryPrice = await CountryPriceAsync(product.Id, finalCountryId.Value, cancellationToken);
+                if (countryPrice is not decimal price)
+                    return Result.Failure<CreateOrderResponse>(new Error("Error.Validation", "Order_ProductNotSoldInCountry"));
                 
                 var inventoryResult = await DecrementInventoryAsync(product.Id, finalCountryId.Value, itemDto.Quantity, product.NameEn, cancellationToken);
                 if (inventoryResult.IsFailure) return Result.Failure<CreateOrderResponse>(inventoryResult.Error);
@@ -145,23 +124,19 @@ public class CreateOrderHandler : IRequestHandler<CreateOrderCommand, Result<Cre
 
         await ProcessInvoicesAndNotificationsAsync(order, invoice, request, currentUserId, resolvedCountryName, notificationItems, cancellationToken);
 
-        return Result.Success(new CreateOrderResponse(order.Id, order.OrderNumber, order.TotalAmount.Value, finalCountryId.Value));
+        return Result.Success(new CreateOrderResponse(order.Id, order.OrderNumber, order.TotalAmount.Value, finalCountryId.Value, order.Currency));
     }
 
-    private async Task<decimal> ApplyDynamicPricingAsync(Guid productId, Guid countryId, decimal basePrice, CancellationToken cancellationToken)
-    {
-        var productPrice = await _context.ProductPrices
+    /// <summary>
+    /// The product's price in the order country, or null when it has none there. There is no
+    /// fallback: the storefront never offers a product without the visitor's price, and the old
+    /// fallback (any other country's price, then the EGP base price) charged the wrong amount.
+    /// </summary>
+    private Task<decimal?> CountryPriceAsync(Guid productId, Guid countryId, CancellationToken cancellationToken) =>
+        _context.ProductPrices
             .Where(p => p.ProductId == productId && p.CountryId == countryId)
             .Select(p => (decimal?)p.Price)
             .FirstOrDefaultAsync(cancellationToken);
-        
-        productPrice ??= await _context.ProductPrices
-            .Where(p => p.ProductId == productId)
-            .Select(p => (decimal?)p.Price)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        return productPrice ?? basePrice;
-    }
 
     private async Task<Result> DecrementInventoryAsync(Guid productId, Guid countryId, int quantity, string productName, CancellationToken cancellationToken)
     {
