@@ -13,4 +13,4 @@ public record CreateOrderCommand(
 
 public record OrderItemDto(Guid ProductId, int Quantity);
 
-public record CreateOrderResponse(Guid OrderId, string OrderNumber, decimal TotalAmount, Guid CountryId);
+public record CreateOrderResponse(Guid OrderId, string OrderNumber, decimal TotalAmount, Guid CountryId, string Currency = "");

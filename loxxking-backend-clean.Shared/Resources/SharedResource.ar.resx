@@ -133,6 +133,12 @@
   <data name="Product_CountryPriceDuplicate" xml:space="preserve">
     <value>لا يمكن إضافة سعرين لنفس الدولة.</value>
   </data>
+  <data name="Order_CountryNotSold" xml:space="preserve">
+    <value>اختر دولة التوصيل من الدول المتاحة.</value>
+  </data>
+  <data name="Order_ProductNotSoldInCountry" xml:space="preserve">
+    <value>أحد المنتجات في السلة غير متاح في الدولة المختارة.</value>
+  </data>
   <data name="Product_VideoTooLarge" xml:space="preserve">
     <value>الفيديو أكبر من 30 ميجابايت. اضغطه وحاول مرة أخرى.</value>
   </data>
