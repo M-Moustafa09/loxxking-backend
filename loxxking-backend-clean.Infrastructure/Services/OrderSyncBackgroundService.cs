@@ -104,7 +104,11 @@ public class OrderSyncBackgroundService : BackgroundService
                 OrderNumber = order.OrderNumber,
                 CustomerName = order.Customer?.Name ?? order.GuestName ?? "Unknown",
                 Phone = order.Phone,
-                Address = order.Address,
+                // The CRM order has no area field and no courier asks for one, but the driver does:
+                // it leads the address (owner decision 2026-09-22), e.g. «حي النخيل - شارع ...».
+                Address = string.IsNullOrWhiteSpace(order.Area)
+                    ? order.Address
+                    : $"{order.Area.Trim()} - {order.Address}",
                 City = order.City,
                 Country = order.Country.Name,
                 Notes = order.Notes,
