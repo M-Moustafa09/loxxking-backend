@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Caching.Distributed;
+using loxxking_backend_clean.Application.Common.Caching;
 using System.Text.Json;
 using loxxking_backend_clean.Application.Features.Products.Queries.GetProducts;
 
@@ -18,7 +19,7 @@ public class GetBundleOffersHandler : IRequestHandler<GetBundleOffersQuery, Resu
     public async Task<Result<List<BundleOfferResponse>>> Handle(GetBundleOffersQuery request, CancellationToken cancellationToken)
     {
         var lang = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
-        var cacheKey = $"BundleOffers_{lang}_{request.ActiveOnly}";
+        var cacheKey = await CatalogCache.KeyAsync(_cache, $"BundleOffers_{lang}_{request.ActiveOnly}", cancellationToken);
 
         var cachedData = await _cache.GetStringAsync(cacheKey, cancellationToken);
         if (!string.IsNullOrEmpty(cachedData))

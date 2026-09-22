@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Caching.Distributed;
+using loxxking_backend_clean.Application.Common.Caching;
 using System.Text.Json;
 
 namespace loxxking_backend_clean.Application.Features.ProductPrices.Queries.GetProductPriceByCountry;
@@ -18,7 +19,7 @@ public class GetProductPriceByCountryHandler : IRequestHandler<GetProductPriceBy
 
     public async Task<Result<object>> Handle(GetProductPriceByCountryQuery request, CancellationToken cancellationToken)
     {
-        var cacheKey = $"ProductPrice_Country_{request.ProductId}_{request.CountryId}";
+        var cacheKey = await CatalogCache.KeyAsync(_cache, $"ProductPrice_Country_{request.ProductId}_{request.CountryId}", cancellationToken);
 
         var cachedData = await _cache.GetStringAsync(cacheKey, cancellationToken);
         if (!string.IsNullOrEmpty(cachedData))

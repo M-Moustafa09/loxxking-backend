@@ -1,5 +1,3 @@
-using Microsoft.Extensions.Caching.Distributed;
-
 namespace loxxking_backend_clean.Application.Features.Products.Commands.DeleteProduct;
 
 public record DeleteProductCommand(Guid Id) : IRequest<Result>;
@@ -7,12 +5,10 @@ public record DeleteProductCommand(Guid Id) : IRequest<Result>;
 public class DeleteProductHandler : IRequestHandler<DeleteProductCommand, Result>
 {
     private readonly IApplicationDbContext _context;
-    private readonly IDistributedCache _cache;
 
-    public DeleteProductHandler(IApplicationDbContext context, IDistributedCache cache) 
+    public DeleteProductHandler(IApplicationDbContext context) 
     { 
         _context = context; 
-        _cache = cache;
     }
 
     public async Task<Result> Handle(DeleteProductCommand request, CancellationToken cancellationToken)
@@ -24,15 +20,6 @@ public class DeleteProductHandler : IRequestHandler<DeleteProductCommand, Result
         product.IsDeleted = true;
         product.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(cancellationToken);
-
-        // The list cache was never cleared here, so a deleted product kept showing up for up to
-        // ten minutes — visible now that the dashboard deletes from a list it reloads right after.
-        await _cache.RemoveAsync("ProductsList_v2_", cancellationToken);
-        await _cache.RemoveAsync($"ProductsList_v2_{product.CategoryId}", cancellationToken);
-        await _cache.RemoveAsync($"ProductDetail_{product.Id}_ar", cancellationToken);
-        await _cache.RemoveAsync($"ProductDetail_{product.Id}_en", cancellationToken);
-        await _cache.RemoveAsync($"ProductDetail_Slug_{product.Slug}_ar", cancellationToken);
-        await _cache.RemoveAsync($"ProductDetail_Slug_{product.Slug}_en", cancellationToken);
 
         return Result.Success();
     }

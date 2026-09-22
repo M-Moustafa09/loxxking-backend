@@ -1,5 +1,3 @@
-using Microsoft.Extensions.Caching.Distributed;
-
 namespace loxxking_backend_clean.Application.Features.Products.Commands.ProductVideo;
 
 /// <summary>One video per product: an upload replaces the old one, and the old file is removed.</summary>
@@ -14,30 +12,17 @@ public static class ProductVideoRules
 
     /// <summary>Formats every browser plays in a plain &lt;video&gt; tag. (.mov is Safari-only.)</summary>
     public static readonly string[] Extensions = { ".mp4", ".webm" };
-
-    internal static async Task ClearProductCacheAsync(IDistributedCache cache, Domain.Entities.Products.Product product, CancellationToken ct)
-    {
-        await cache.RemoveAsync("ProductsList_v2_", ct);
-        await cache.RemoveAsync($"ProductsList_v2_{product.CategoryId}", ct);
-        foreach (var lang in new[] { "ar", "en" })
-        {
-            await cache.RemoveAsync($"ProductDetail_{product.Id}_{lang}", ct);
-            await cache.RemoveAsync($"ProductDetail_Slug_{product.Slug}_{lang}", ct);
-        }
-    }
 }
 
 public class UploadProductVideoHandler : IRequestHandler<UploadProductVideoCommand, Result<string>>
 {
     private readonly IApplicationDbContext _context;
     private readonly IFileStorageService _fileStorage;
-    private readonly IDistributedCache _cache;
 
-    public UploadProductVideoHandler(IApplicationDbContext context, IFileStorageService fileStorage, IDistributedCache cache)
+    public UploadProductVideoHandler(IApplicationDbContext context, IFileStorageService fileStorage)
     {
         _context = context;
         _fileStorage = fileStorage;
-        _cache = cache;
     }
 
     public async Task<Result<string>> Handle(UploadProductVideoCommand request, CancellationToken cancellationToken)
@@ -59,7 +44,6 @@ public class UploadProductVideoHandler : IRequestHandler<UploadProductVideoComma
 
         if (!string.IsNullOrEmpty(oldUrl))
             await _fileStorage.DeleteAsync(oldUrl, cancellationToken);
-        await ProductVideoRules.ClearProductCacheAsync(_cache, product, cancellationToken);
 
         return Result.Success(url);
     }
@@ -69,13 +53,11 @@ public class DeleteProductVideoHandler : IRequestHandler<DeleteProductVideoComma
 {
     private readonly IApplicationDbContext _context;
     private readonly IFileStorageService _fileStorage;
-    private readonly IDistributedCache _cache;
 
-    public DeleteProductVideoHandler(IApplicationDbContext context, IFileStorageService fileStorage, IDistributedCache cache)
+    public DeleteProductVideoHandler(IApplicationDbContext context, IFileStorageService fileStorage)
     {
         _context = context;
         _fileStorage = fileStorage;
-        _cache = cache;
     }
 
     public async Task<Result> Handle(DeleteProductVideoCommand request, CancellationToken cancellationToken)
@@ -90,7 +72,6 @@ public class DeleteProductVideoHandler : IRequestHandler<DeleteProductVideoComma
         await _context.SaveChangesAsync(cancellationToken);
 
         await _fileStorage.DeleteAsync(oldUrl, cancellationToken);
-        await ProductVideoRules.ClearProductCacheAsync(_cache, product, cancellationToken);
 
         return Result.Success();
     }

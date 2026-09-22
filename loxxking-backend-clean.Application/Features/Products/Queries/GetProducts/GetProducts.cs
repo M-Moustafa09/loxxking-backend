@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Caching.Distributed;
+using loxxking_backend_clean.Application.Common.Caching;
 using System.Text.Json;
 
 namespace loxxking_backend_clean.Application.Features.Products.Queries.GetProducts;
@@ -54,7 +55,7 @@ public class GetProductsHandler : IRequestHandler<GetProductsQuery, Result<List<
 
     public async Task<Result<List<ProductListResponse>>> Handle(GetProductsQuery request, CancellationToken cancellationToken)
     {
-        string cacheKey = $"ProductsList_v2_{request.CategoryId}";
+        string cacheKey = await CatalogCache.KeyAsync(_cache, $"ProductsList_v2_{request.CategoryId}", cancellationToken);
         var cachedData = await _cache.GetStringAsync(cacheKey, cancellationToken);
         
         List<ProductListResponse>? products = null;

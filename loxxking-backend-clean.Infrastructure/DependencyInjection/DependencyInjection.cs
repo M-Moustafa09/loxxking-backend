@@ -7,6 +7,7 @@ using System.Text;
 using loxxking_backend_clean.Domain.Entities.Users;
 using Microsoft.AspNetCore.Identity;
 using loxxking_backend_clean.Infrastructure.Persistence.Seeder;
+using loxxking_backend_clean.Infrastructure.Persistence.Interceptors;
 
 namespace loxxking_backend_clean.Infrastructure.DependencyInjection;
 
@@ -14,10 +15,12 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddDbContext<ApplicationDbContext>(options =>
+        services.AddScoped<CatalogChangeInterceptor>();
+        services.AddDbContext<ApplicationDbContext>((provider, options) =>
             options.UseSqlServer(
                 configuration.GetConnectionString("DefaultConnection"),
-                b => b.MigrationsAssembly(typeof(ApplicationDbContext).Assembly.FullName)));
+                b => b.MigrationsAssembly(typeof(ApplicationDbContext).Assembly.FullName))
+            .AddInterceptors(provider.GetRequiredService<CatalogChangeInterceptor>()));
 
         services.AddScoped<IApplicationDbContext>(provider => provider.GetRequiredService<ApplicationDbContext>());
 

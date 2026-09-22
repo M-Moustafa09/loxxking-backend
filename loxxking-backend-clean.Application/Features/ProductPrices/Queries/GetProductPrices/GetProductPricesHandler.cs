@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Caching.Distributed;
+using loxxking_backend_clean.Application.Common.Caching;
 using System.Text.Json;
 
 namespace loxxking_backend_clean.Application.Features.ProductPrices.Queries.GetProductPrices;
@@ -16,7 +17,7 @@ public class GetProductPricesHandler : IRequestHandler<GetProductPricesQuery, Re
 
     public async Task<Result<List<GetProductPricesResponse>>> Handle(GetProductPricesQuery request, CancellationToken cancellationToken)
     {
-        string cacheKey = $"ProductPrices_{request.ProductId}";
+        string cacheKey = await CatalogCache.KeyAsync(_cache, $"ProductPrices_{request.ProductId}", cancellationToken);
         var cachedData = await _cache.GetStringAsync(cacheKey, cancellationToken);
         
         List<GetProductPricesResponse>? prices = null;

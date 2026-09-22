@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Caching.Distributed;
+using loxxking_backend_clean.Application.Common.Caching;
 using System.Text.Json;
 
 using loxxking_backend_clean.Application.Features.Products.Queries.GetProducts;
@@ -20,9 +21,13 @@ public class GetOffersHandler : IRequestHandler<GetOffersQuery, Result<List<Prod
 
     public async Task<Result<List<ProductListResponse>>> Handle(GetOffersQuery request, CancellationToken cancellationToken)
     {
-        if (request.ActiveOnly)
+        var cacheKey = request.ActiveOnly
+            ? await CatalogCache.KeyAsync(_cache, ActiveOffersCacheKey, cancellationToken)
+            : null;
+
+        if (cacheKey is not null)
         {
-            var cached = await _cache.GetStringAsync(ActiveOffersCacheKey, cancellationToken);
+            var cached = await _cache.GetStringAsync(cacheKey, cancellationToken);
             if (cached is not null)
             {
                 var cachedOffers = JsonSerializer.Deserialize<List<ProductListResponse>>(cached);
@@ -63,10 +68,10 @@ public class GetOffersHandler : IRequestHandler<GetOffersQuery, Result<List<Prod
             ))
             .ToListAsync(cancellationToken);
 
-        if (request.ActiveOnly)
+        if (cacheKey is not null)
         {
             var options = new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = CacheTtl };
-            await _cache.SetStringAsync(ActiveOffersCacheKey, JsonSerializer.Serialize(offersList), options, cancellationToken);
+            await _cache.SetStringAsync(cacheKey, JsonSerializer.Serialize(offersList), options, cancellationToken);
         }
 
         return Result.Success(offersList);
