@@ -1,4 +1,5 @@
 using loxxking_backend_clean.Application.Common.Caching;
+using loxxking_backend_clean.Application.Common.Interfaces;
 using loxxking_backend_clean.Application.Features.Offers.Commands.DeleteOffer;
 using loxxking_backend_clean.Application.Features.Offers.Commands.UpdateOffer;
 using loxxking_backend_clean.Application.Features.Offers.Queries.GetOffers;
@@ -18,10 +19,11 @@ using Xunit;
 namespace loxxking_backend_clean.Api.IntegrationTests;
 
 /// <summary>
-/// A saved change to the catalogue reaches the storefront's cached reads at once — including the changes
-/// that used to leave them stale for minutes: editing or deleting an offer, and a country price.
+/// A saved change to the catalogue reaches the storefront at once: the cached reads turn over (including the changes
+/// that used to leave them stale for minutes: editing or deleting an offer, a country price) and every open
+/// page is told to reload.
 /// </summary>
-public class VerifyCatalogCacheRuntimeBehavior
+public class VerifyCatalogChangeRuntimeBehavior
 {
     private static IDistributedCache GetCache()
     {
@@ -29,11 +31,23 @@ public class VerifyCatalogCacheRuntimeBehavior
         return new MemoryDistributedCache(opts);
     }
 
-    private static ApplicationDbContext GetDbContext(IDistributedCache cache)
+    /// <summary>Records what would be broadcast to the open storefronts; null in the list = "any product".</summary>
+    private sealed class RecordingNotifier : ICatalogChangeNotifier
+    {
+        public List<IReadOnlyCollection<Guid>?> Sent { get; } = new();
+
+        public Task CatalogChangedAsync(IReadOnlyCollection<Guid>? productIds)
+        {
+            Sent.Add(productIds);
+            return Task.CompletedTask;
+        }
+    }
+
+    private static ApplicationDbContext GetDbContext(IDistributedCache cache, ICatalogChangeNotifier? notifier = null)
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseSqlite("DataSource=:memory:")
-            .AddInterceptors(new CatalogChangeInterceptor(cache))
+            .AddInterceptors(new CatalogChangeInterceptor(cache, notifier ?? new RecordingNotifier()))
             .Options;
 
         var context = new ApplicationDbContext(options);
@@ -95,36 +109,80 @@ public class VerifyCatalogCacheRuntimeBehavior
     }
 
     [Fact]
-    public async Task Inside_A_Transaction_The_Cache_Turns_Over_Only_On_Commit()
+    public async Task Inside_A_Transaction_The_Cache_Turns_Over_And_Storefronts_Hear_Only_On_Commit()
     {
         var cache = GetCache();
-        var db = GetDbContext(cache);
+        var notifier = new RecordingNotifier();
+        var db = GetDbContext(cache, notifier);
         var product = await SeedProductAsync(db);
+        notifier.Sent.Clear();
         var keyBefore = await CatalogCache.KeyAsync(cache, "x", CancellationToken.None);
 
         await using (var tx = await db.Database.BeginTransactionAsync())
         {
             product.UpdateStock(3);
             await db.SaveChangesAsync();
-            // Not committed yet: a read now would still see the old stock, so the version must hold.
+            // Not committed yet: a read now would still see the old stock, so nothing may move.
             Assert.Equal(keyBefore, await CatalogCache.KeyAsync(cache, "x", CancellationToken.None));
+            Assert.Empty(notifier.Sent);
             await tx.CommitAsync();
         }
 
         Assert.NotEqual(keyBefore, await CatalogCache.KeyAsync(cache, "x", CancellationToken.None));
+        Assert.Equal(new[] { product.Id }, Assert.Single(notifier.Sent));
     }
 
     [Fact]
-    public async Task A_Change_Outside_The_Catalogue_Leaves_The_Cache_Alone()
+    public async Task A_Rolled_Back_Change_Is_Never_Broadcast()
+    {
+        var notifier = new RecordingNotifier();
+        var db = GetDbContext(GetCache(), notifier);
+        var product = await SeedProductAsync(db);
+        notifier.Sent.Clear();
+
+        await using (var tx = await db.Database.BeginTransactionAsync())
+        {
+            product.UpdateStock(3);
+            await db.SaveChangesAsync();
+            await tx.RollbackAsync();
+        }
+
+        Assert.Empty(notifier.Sent);
+    }
+
+    [Fact]
+    public async Task Storefronts_Hear_Which_Product_Changed_Or_That_Any_May_Have()
+    {
+        var notifier = new RecordingNotifier();
+        var db = GetDbContext(GetCache(), notifier);
+        var product = await SeedProductAsync(db);
+        // A new product arrives with its category: a category can change any card.
+        Assert.Null(Assert.Single(notifier.Sent));
+        notifier.Sent.Clear();
+
+        var country = Country.Create("Egypt", "EGP");
+        db.Countries.Add(country);
+        await db.SaveChangesAsync();
+        notifier.Sent.Clear();
+
+        await new UpsertProductPriceHandler(db).Handle(new UpsertProductPriceCommand(product.Id, country.Id, 750m), CancellationToken.None);
+        Assert.Equal(new[] { product.Id }, Assert.Single(notifier.Sent));
+    }
+
+    [Fact]
+    public async Task A_Change_Outside_The_Catalogue_Leaves_The_Cache_And_The_Storefronts_Alone()
     {
         var cache = GetCache();
-        var db = GetDbContext(cache);
+        var notifier = new RecordingNotifier();
+        var db = GetDbContext(cache, notifier);
         await SeedProductAsync(db);
+        notifier.Sent.Clear();
         var keyBefore = await CatalogCache.KeyAsync(cache, "x", CancellationToken.None);
 
         db.SiteVisits.Add(loxxking_backend_clean.Domain.Entities.SiteVisits.SiteVisit.Create(null, "/"));
         await db.SaveChangesAsync();
 
         Assert.Equal(keyBefore, await CatalogCache.KeyAsync(cache, "x", CancellationToken.None));
+        Assert.Empty(notifier.Sent);
     }
 }

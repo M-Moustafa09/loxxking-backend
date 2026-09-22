@@ -16,6 +16,7 @@ public static class DependencyInjection
         services.AddHttpContextAccessor();
         services.AddScoped<loxxking_backend_clean.Application.Common.Interfaces.ICurrentUserService, loxxking_backend_clean.Api.Services.CurrentUserService>();
         services.AddScoped<loxxking_backend_clean.Application.Common.Interfaces.ISupportNotificationService, loxxking_backend_clean.Api.Services.SupportNotificationService>();
+        services.AddScoped<loxxking_backend_clean.Application.Common.Interfaces.ICatalogChangeNotifier, loxxking_backend_clean.Api.Services.CatalogChangeNotifier>();
 
         services.AddExceptionHandler<ValidationExceptionHandler>();
         services.AddProblemDetails();
