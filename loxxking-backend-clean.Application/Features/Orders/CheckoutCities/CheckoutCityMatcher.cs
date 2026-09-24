@@ -9,8 +9,12 @@ namespace loxxking_backend_clean.Application.Features.Orders.CheckoutCities;
 /// «الإسكندرية» left the order without a courier until someone retyped it. The two are compared
 /// after the spelling differences Arabic typists make every day are set aside (hamza forms of alef,
 /// ة/ه, ى/ي, diacritics, tatweel, a leading «ال», spaces and punctuation), and the English name the
-/// suggestions show counts too. Then one slip of a letter (two in a long name) is still accepted, but
-/// only when no other city is as close: an unclear guess keeps the customer's text as typed.
+/// suggestions show counts too.
+///
+/// A different letter is never accepted, even one: «ورشفانه» and «ورشفاته» are two places, and a
+/// wrong guess ships the parcel to the wrong city without anyone noticing. The CRM matches cities
+/// for its couriers the same way (CamexCityMatcher, 2026-09-24 review), so a name the customer typed
+/// that is not clearly one of the CRM's cities is kept as typed for staff to check.
 /// </summary>
 public static class CheckoutCityMatcher
 {
@@ -27,23 +31,8 @@ public static class CheckoutCityMatcher
             .Where(c => c.Key.Length > 0)
             .ToList();
 
-        var exact = candidates.Where(c => c.Key == wanted).Select(c => c.City).Distinct().ToList();
-        if (exact.Count > 0) return exact.Count == 1 ? exact[0] : null;
-
-        var allowed = wanted.Length >= 9 ? 2 : wanted.Length >= 5 ? 1 : 0;
-        if (allowed == 0) return null;
-
-        var closest = candidates
-            .Select(c => (c.City, Distance: Distance(wanted, c.Key)))
-            .Where(c => c.Distance <= allowed)
-            .GroupBy(c => c.Distance)
-            .OrderBy(g => g.Key)
-            .FirstOrDefault()?
-            .Select(c => c.City)
-            .Distinct()
-            .ToList();
-
-        return closest is { Count: 1 } ? closest[0] : null;
+        var matches = candidates.Where(c => c.Key == wanted).Select(c => c.City).Distinct().ToList();
+        return matches.Count == 1 ? matches[0] : null;
     }
 
     /// <summary>The spelling-free form two names are compared in.</summary>
@@ -73,25 +62,5 @@ public static class CheckoutCityMatcher
             .Where(w => w is not ("al" or "el"));
 
         return string.Concat(words).Normalize(NormalizationForm.FormC);
-    }
-
-    /// <summary>Levenshtein distance: the letters added, removed or changed to get from one to the other.</summary>
-    private static int Distance(string a, string b)
-    {
-        var previous = new int[b.Length + 1];
-        var current = new int[b.Length + 1];
-        for (var j = 0; j <= b.Length; j++) previous[j] = j;
-
-        for (var i = 1; i <= a.Length; i++)
-        {
-            current[0] = i;
-            for (var j = 1; j <= b.Length; j++)
-            {
-                var cost = a[i - 1] == b[j - 1] ? 0 : 1;
-                current[j] = Math.Min(Math.Min(current[j - 1] + 1, previous[j] + 1), previous[j - 1] + cost);
-            }
-            (previous, current) = (current, previous);
-        }
-        return previous[b.Length];
     }
 }
