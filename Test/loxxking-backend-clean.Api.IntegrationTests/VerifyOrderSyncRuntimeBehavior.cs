@@ -38,7 +38,17 @@ public class VerifyOrderSyncRuntimeBehavior
         }
     }
 
-    private static (OrderSyncBackgroundService Sync, Func<ApplicationDbContext> Db, FakeCrm Crm) Setup()
+    /// <summary>Accepts every order and hands each payload to <paramref name="onSend"/>.</summary>
+    private sealed class CapturingCrm(Action<CrmOrderSyncDto> onSend) : ILegacyCrmSyncService
+    {
+        public Task<Result<CrmSyncResponse>> SyncOrderAsync(CrmOrderSyncDto dto, CancellationToken cancellationToken = default)
+        {
+            onSend(dto);
+            return Task.FromResult(Result.Success(new CrmSyncResponse { Success = true, LegacyCrmOrderId = 1 }));
+        }
+    }
+
+    private static (OrderSyncBackgroundService Sync, Func<ApplicationDbContext> Db, FakeCrm Crm) Setup(ILegacyCrmSyncService? crmOverride = null)
     {
         var connection = new SqliteConnection("DataSource=:memory:");
         connection.Open();
@@ -47,7 +57,7 @@ public class VerifyOrderSyncRuntimeBehavior
         var services = new ServiceCollection();
         services.AddDbContext<ApplicationDbContext>(o => o.UseSqlite(connection));
         services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<ApplicationDbContext>());
-        services.AddSingleton<ILegacyCrmSyncService>(crm);
+        services.AddSingleton<ILegacyCrmSyncService>(crmOverride ?? crm);
         var provider = services.BuildServiceProvider();
 
         ApplicationDbContext Db() => provider.CreateScope().ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -141,4 +151,29 @@ public class VerifyOrderSyncRuntimeBehavior
     [InlineData(100, 3600)]
     public void Retry_Delay_Doubles_Up_To_An_Hour(int attempt, int seconds)
         => Assert.Equal(TimeSpan.FromSeconds(seconds), OrderSyncBackgroundService.RetryDelay(attempt));
+
+    [Fact]
+    public void The_Crm_Gets_The_Order_Time_In_Istanbul_Time()
+    {
+        // 22:30 UTC = 01:30 the next day in Istanbul: the CRM must file it under the 25th.
+        var crmTime = OrderSyncBackgroundService.ToCrmTime(new DateTime(2026, 9, 24, 22, 30, 0));
+        Assert.Equal(new DateTime(2026, 9, 25, 1, 30, 0), crmTime);
+        // Sent without an offset, as the CRM's own dates are.
+        Assert.Equal(DateTimeKind.Unspecified, crmTime.Kind);
+    }
+
+    [Fact]
+    public async Task The_Synced_Order_Carries_Istanbul_Time()
+    {
+        CrmOrderSyncDto? sent = null;
+        var capture = new CapturingCrm(dto => sent = dto);
+        var (sync, Db, _) = Setup(capture);
+        var placedUtc = new DateTime(2026, 9, 24, 21, 15, 0, DateTimeKind.Utc);
+        await SeedOrdersAsync(Db(), placedUtc, 1, "ORD");
+
+        await sync.ProcessPendingOrdersAsync(placedUtc.AddMinutes(1), CancellationToken.None);
+
+        Assert.NotNull(sent);
+        Assert.Equal(new DateTime(2026, 9, 25, 0, 15, 0), sent!.CreatedAt);
+    }
 }
