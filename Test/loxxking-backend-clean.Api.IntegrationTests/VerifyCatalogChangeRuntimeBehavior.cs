@@ -1,5 +1,6 @@
 using loxxking_backend_clean.Application.Common.Caching;
 using loxxking_backend_clean.Application.Common.Interfaces;
+using loxxking_backend_clean.Application.Features.Offers;
 using loxxking_backend_clean.Application.Features.Offers.Commands.DeleteOffer;
 using loxxking_backend_clean.Application.Features.Offers.Commands.UpdateOffer;
 using loxxking_backend_clean.Application.Features.Offers.Queries.GetOffers;
@@ -184,5 +185,39 @@ public class VerifyCatalogChangeRuntimeBehavior
 
         Assert.Equal(keyBefore, await CatalogCache.KeyAsync(cache, "x", CancellationToken.None));
         Assert.Empty(notifier.Sent);
+    }
+
+    [Fact]
+    public async Task A_Scheduled_Offer_Starting_Or_Ending_Tells_The_Open_Pages()
+    {
+        var cache = GetCache();
+        var db = GetDbContext(cache);
+        var product = await SeedProductAsync(db);
+        var t = new DateTime(2026, 9, 24, 18, 0, 0, DateTimeKind.Utc);
+        db.Offers.Add(Offer.Create(product.Id, Percentage.FromDecimal(20), DateRange.Create(t, t.AddHours(2))));
+        await db.SaveChangesAsync();
+
+        var notifier = new RecordingNotifier();
+        Task<bool> Window(DateTime after, DateTime upTo) =>
+            OfferSchedule.PublishStartsAndEndsAsync(db, cache, notifier, after, upTo, CancellationToken.None);
+
+        // Nothing starts or ends before the offer.
+        Assert.False(await Window(t.AddSeconds(-30), t.AddSeconds(-15)));
+        Assert.Empty(notifier.Sent);
+
+        // The offer starts: a new catalogue version, and its product's pages reload.
+        var keyBefore = await CatalogCache.KeyAsync(cache, "x", CancellationToken.None);
+        Assert.True(await Window(t.AddSeconds(-15), t));
+        Assert.Equal(product.Id, Assert.Single(Assert.Single(notifier.Sent)!));
+        Assert.NotEqual(keyBefore, await CatalogCache.KeyAsync(cache, "x", CancellationToken.None));
+
+        // While it runs, nothing.
+        Assert.False(await Window(t, t.AddSeconds(15)));
+        Assert.False(await Window(t.AddHours(2).AddSeconds(-15), t.AddHours(2)));
+
+        // It ends: told again.
+        Assert.True(await Window(t.AddHours(2), t.AddHours(2).AddSeconds(15)));
+        Assert.Equal(2, notifier.Sent.Count);
+        Assert.Equal(product.Id, Assert.Single(notifier.Sent[1]!));
     }
 }
