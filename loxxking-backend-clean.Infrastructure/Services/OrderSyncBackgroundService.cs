@@ -144,6 +144,29 @@ public class OrderSyncBackgroundService : BackgroundService
         return delay > MaxRetryDelay ? MaxRetryDelay : delay;
     }
 
+    // The CRM keeps every date in Istanbul time (its GetIstanbulTimeWithOffset); Turkey has had no
+    // daylight saving since 2016, so the fixed +3 is the fallback where the zone is not installed.
+    private static readonly TimeZoneInfo CrmTimeZone = FindCrmTimeZone();
+
+    private static TimeZoneInfo FindCrmTimeZone()
+    {
+        foreach (var id in new[] { "Europe/Istanbul", "Turkey Standard Time" })
+        {
+            if (TimeZoneInfo.TryFindSystemTimeZoneById(id, out var zone)) return zone;
+        }
+        return TimeZoneInfo.CreateCustomTimeZone("Istanbul", TimeSpan.FromHours(3), "Istanbul", "Istanbul");
+    }
+
+    /// <summary>
+    /// The order's time as the CRM records its own orders: Istanbul time. The store saves UTC, and
+    /// the CRM stores what it receives as is, so a store order showed three hours early — one placed
+    /// after midnight in Istanbul fell on the previous day in the CRM's daily reports and bonuses.
+    /// </summary>
+    public static DateTime ToCrmTime(DateTime utc) =>
+        DateTime.SpecifyKind(
+            TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), CrmTimeZone),
+            DateTimeKind.Unspecified);
+
     private static CrmOrderSyncDto ToSyncDto(Domain.Entities.Orders.Order order) => new()
     {
         LoxxkingOrderId = order.Id,
@@ -161,7 +184,7 @@ public class OrderSyncBackgroundService : BackgroundService
         PaymentMethod = order.PaymentMethod.ToString(),
         TotalAmount = order.TotalAmount.Value,
         Currency = order.Currency,
-        CreatedAt = order.CreatedAt,
+        CreatedAt = ToCrmTime(order.CreatedAt),
         Items = order.OrderItems.Select(i => new CrmOrderItemSyncDto
         {
             ProductName = i.Product?.NameAr ?? i.Product?.NameEn ?? i.ProductId.ToString(),
