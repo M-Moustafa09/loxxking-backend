@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace loxxking_backend_clean.Api.Common;
+namespace loxxking_backend_clean.Application.Features.Orders.CheckoutCities;
 
 /// <summary>
 /// English names for the CRM's Arabic city names, so the checkout suggestions follow the storefront

@@ -1,6 +1,7 @@
 using loxxking_backend_clean.Domain.Entities.Orders;
 using loxxking_backend_clean.Domain.Entities.Invoices;
 using loxxking_backend_clean.Application.Features.Offers;
+using loxxking_backend_clean.Application.Features.Orders.CheckoutCities;
 
 namespace loxxking_backend_clean.Application.Features.Orders.Commands.CreateOrder;
 
@@ -12,19 +13,22 @@ public class CreateOrderHandler : IRequestHandler<CreateOrderCommand, Result<Cre
     private readonly IInvoicePdfGenerator _pdfGenerator;
     private readonly IOrderNotificationService _notificationService;
     private readonly Microsoft.Extensions.Caching.Distributed.IDistributedCache _cache;
+    private readonly ICheckoutCityDirectory _cities;
 
     public CreateOrderHandler(
         IApplicationDbContext context,
         ICurrentUserService currentUserService,
         IInvoicePdfGenerator pdfGenerator,
         IOrderNotificationService notificationService,
-        Microsoft.Extensions.Caching.Distributed.IDistributedCache cache)
+        Microsoft.Extensions.Caching.Distributed.IDistributedCache cache,
+        ICheckoutCityDirectory cities)
     {
         _context = context;
         _currentUserService = currentUserService;
         _pdfGenerator = pdfGenerator;
         _notificationService = notificationService;
         _cache = cache;
+        _cities = cities;
     }
 
     public async Task<Result<CreateOrderResponse>> Handle(CreateOrderCommand request, CancellationToken cancellationToken)
@@ -57,6 +61,8 @@ public class CreateOrderHandler : IRequestHandler<CreateOrderCommand, Result<Cre
         Guid? finalCountryId = countryEntity.Id;
         var resolvedCountryName = countryEntity.Name;
 
+        var city = await ResolveCityAsync(request.City, countryEntity.Id, cancellationToken);
+
         Order order;
         Invoice invoice;
         var notificationItems = new List<OrderNotificationItem>();
@@ -79,7 +85,7 @@ public class CreateOrderHandler : IRequestHandler<CreateOrderCommand, Result<Cre
                 null, // guestPhone
                 null, // guestAddress
                 countryEntity.Currency,
-                request.City,
+                city,
                 request.Area
             );
 
@@ -133,6 +139,18 @@ public class CreateOrderHandler : IRequestHandler<CreateOrderCommand, Result<Cre
         await ProcessInvoicesAndNotificationsAsync(order, invoice, request, currentUserId, resolvedCountryName, notificationItems, cancellationToken);
 
         return Result.Success(new CreateOrderResponse(order.Id, order.OrderNumber, order.TotalAmount.Value, finalCountryId.Value, order.Currency));
+    }
+
+    /// <summary>
+    /// The city as the CRM spells it when the customer's text clearly means one of the CRM's cities
+    /// («اسكندريه» → «الإسكندرية»), so the CRM can pick the courier; otherwise the text as typed.
+    /// The CRM list is cached; when it cannot be read the order still goes through.
+    /// </summary>
+    private async Task<string?> ResolveCityAsync(string? typed, Guid countryId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(typed)) return typed;
+        var cities = await _cities.GetCitiesAsync(countryId, cancellationToken);
+        return cities is null ? typed : CheckoutCityMatcher.Match(typed, cities) ?? typed;
     }
 
     /// <summary>

@@ -17,6 +17,7 @@ public static class DependencyInjection
         services.AddScoped<loxxking_backend_clean.Application.Common.Interfaces.ICurrentUserService, loxxking_backend_clean.Api.Services.CurrentUserService>();
         services.AddScoped<loxxking_backend_clean.Application.Common.Interfaces.ISupportNotificationService, loxxking_backend_clean.Api.Services.SupportNotificationService>();
         services.AddScoped<loxxking_backend_clean.Application.Common.Interfaces.ICatalogChangeNotifier, loxxking_backend_clean.Api.Services.CatalogChangeNotifier>();
+        services.AddScoped<loxxking_backend_clean.Application.Common.Interfaces.ICheckoutCityDirectory, loxxking_backend_clean.Api.Services.CheckoutCityDirectory>();
 
         services.AddExceptionHandler<ValidationExceptionHandler>();
         services.AddProblemDetails();
