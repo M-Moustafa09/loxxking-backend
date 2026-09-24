@@ -230,4 +230,34 @@ public class VerifyOrdersRuntimeBehavior
         Assert.Equal("الرياض", typedOrder.City);
         Assert.Equal("حي النخيل", typedOrder.Area);
     }
+
+    [Fact]
+    public async Task Verify_Order_Succeeds_Without_Inventory()
+    {
+        var db = GetDbContext();
+        var handler = new CreateOrderHandler(db, new Mock<ICurrentUserService>().Object, new Mock<IInvoicePdfGenerator>().Object, new Mock<IOrderNotificationService>().Object, GetCache());
+
+        // A product added from the dashboard: a price in Turkey, no inventory rows at all.
+        var turkey = Country.Create("Turkey", "TRY", "tr", false);
+        db.Countries.Add(turkey);
+        var category = loxxking_backend_clean.Domain.Entities.Categories.Category.Create("Cat AR", "Cat EN", "cat-no-stock", "");
+        db.Categories.Add(category);
+        var product = Product.Create(
+            category.Id, "AR", "EN", "Desc", "slug-no-stock",
+            loxxking_backend_clean.Domain.ValueObjects.Money.FromDecimal(500),
+            null, new List<string>(), new List<string>(), new List<string>(),
+            "", null, null, null, true, true, null);
+        db.Products.Add(product);
+        db.ProductPrices.Add(new loxxking_backend_clean.Domain.Entities.Products.ProductPrice { ProductId = product.Id, CountryId = turkey.Id, Price = 900 });
+        await db.SaveChangesAsync();
+
+        var result = await handler.Handle(new CreateOrderCommand(
+            "Addr", "+90", null, PaymentMethod.CashOnDelivery,
+            new List<loxxking_backend_clean.Application.Features.Orders.Commands.CreateOrder.OrderItemDto> { new(product.Id, 3) },
+            turkey.Id, "Guest", null), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(2700m, result.Value.TotalAmount);
+        Assert.Equal("TRY", result.Value.Currency);
+    }
 }

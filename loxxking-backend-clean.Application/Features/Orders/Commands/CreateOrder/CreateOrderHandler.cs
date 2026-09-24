@@ -1,6 +1,5 @@
 using loxxking_backend_clean.Domain.Entities.Orders;
 using loxxking_backend_clean.Domain.Entities.Invoices;
-using loxxking_backend_clean.Domain.Entities.Inventory;
 using loxxking_backend_clean.Application.Features.Offers;
 
 namespace loxxking_backend_clean.Application.Features.Orders.Commands.CreateOrder;
@@ -100,10 +99,10 @@ public class CreateOrderHandler : IRequestHandler<CreateOrderCommand, Result<Cre
                     return Result.Failure<CreateOrderResponse>(new Error("Error.Validation", "Order_ProductNotSoldInCountry"));
                 if (offers.TryGetValue(product.Id, out var offer))
                     price = ActiveOffers.Apply(price, offer.Percent);
-                
-                var inventoryResult = await DecrementInventoryAsync(product.Id, finalCountryId.Value, itemDto.Quantity, product.NameEn, cancellationToken);
-                if (inventoryResult.IsFailure) return Result.Failure<CreateOrderResponse>(inventoryResult.Error);
 
+                // Stock is not tracked (owner decision 2026-09-24): a product sold in the order country
+                // is always orderable. Products added from the dashboard have no inventory rows, and the
+                // old stock check refused every order for them.
                 order.AddItem(product.Id, itemDto.Quantity, loxxking_backend_clean.Domain.ValueObjects.Money.FromDecimal(price));
 
                 notificationItems.Add(new OrderNotificationItem(product.NameEn, itemDto.Quantity, price));
@@ -146,62 +145,6 @@ public class CreateOrderHandler : IRequestHandler<CreateOrderCommand, Result<Cre
             .Where(p => p.ProductId == productId && p.CountryId == countryId)
             .Select(p => (decimal?)p.Price)
             .FirstOrDefaultAsync(cancellationToken);
-
-    private async Task<Result> DecrementInventoryAsync(Guid productId, Guid countryId, int quantity, string productName, CancellationToken cancellationToken)
-    {
-        for (int i = 0; i < 3; i++)
-        {
-            InventoryItem? inventory = null;
-            var savepointName = $"inv_{i}_{productId:N}"[..30];
-            try
-            {
-                var currentTransaction = _context.Database.CurrentTransaction;
-                if (currentTransaction != null)
-                {
-                    await currentTransaction.CreateSavepointAsync(savepointName, cancellationToken);
-                }
-
-                inventory = await _context.InventoryItems
-                    .FirstOrDefaultAsync(inv => inv.ProductId == productId && inv.CountryId == countryId, cancellationToken);
-                
-                inventory ??= await _context.InventoryItems
-                    .FirstOrDefaultAsync(inv => inv.ProductId == productId, cancellationToken);
-
-                if (inventory == null || inventory.Quantity < quantity)
-                    return Result.Failure(new Error("Error.Validation", $"Insufficient inventory for product {productName}"));
-
-                inventory.RemoveStock(quantity);
-                _context.InventoryItems.Update(inventory);
-                
-                await loxxking_backend_clean.Application.Features.Inventories.Helpers.InventorySyncHelper.SyncProductStockAsync(productId, _context, cancellationToken);
-                
-                await _context.SaveChangesAsync(cancellationToken);
-                
-                return Result.Success();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                var currentTransaction = _context.Database.CurrentTransaction;
-                
-                if (currentTransaction != null)
-                {
-                    await currentTransaction.RollbackToSavepointAsync(savepointName, cancellationToken);
-                }
-
-                if (i == 2)
-                {
-                    return Result.Failure(new Error("Error.Concurrency", "Order_ConcurrencyRetry"));
-                }
-                
-                if (inventory != null)
-                {
-                    _context.Entry(inventory).State = EntityState.Detached;
-                }
-            }
-        }
-        
-        return Result.Failure(new Error("Error.Concurrency", "Order_ConcurrencyRetry"));
-    }
 
     private async Task ProcessInvoicesAndNotificationsAsync(Order order, Invoice invoice, CreateOrderCommand request, Guid currentUserId, string? resolvedCountryName, List<OrderNotificationItem> notificationItems, CancellationToken cancellationToken)
     {
