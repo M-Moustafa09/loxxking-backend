@@ -133,6 +133,9 @@
   <data name="Product_CountryPriceDuplicate" xml:space="preserve">
     <value>لا يمكن إضافة سعرين لنفس الدولة.</value>
   </data>
+  <data name="Order_PaymentMethodNotSupported" xml:space="preserve">
+    <value>اختر الدفع عند الاستلام أو التحويل البنكي.</value>
+  </data>
   <data name="Order_CountryNotSold" xml:space="preserve">
     <value>اختر دولة التوصيل من الدول المتاحة.</value>
   </data>

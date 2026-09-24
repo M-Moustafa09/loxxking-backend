@@ -63,6 +63,9 @@ public class CreateOrderHandler : IRequestHandler<CreateOrderCommand, Result<Cre
 
         var city = await ResolveCityAsync(request.City, countryEntity.Id, cancellationToken);
 
+        if (StorePaymentMethod(request.PaymentMethod) is not PaymentMethod paymentMethod)
+            return Result.Failure<CreateOrderResponse>(new Error("Error.Validation", "Order_PaymentMethodNotSupported"));
+
         Order order;
         Invoice invoice;
         var notificationItems = new List<OrderNotificationItem>();
@@ -80,7 +83,7 @@ public class CreateOrderHandler : IRequestHandler<CreateOrderCommand, Result<Cre
                 request.Address,
                 request.Phone,
                 request.Notes,
-                request.PaymentMethod,
+                paymentMethod,
                 request.GuestName,
                 null, // guestPhone
                 null, // guestAddress
@@ -140,6 +143,20 @@ public class CreateOrderHandler : IRequestHandler<CreateOrderCommand, Result<Cre
 
         return Result.Success(new CreateOrderResponse(order.Id, order.OrderNumber, order.TotalAmount.Value, finalCountryId.Value, order.Currency));
     }
+
+    /// <summary>
+    /// The store takes cash on delivery and bank transfer only; no card or wallet payment is
+    /// processed, so any other method is refused rather than recorded as paid. The storefront sent
+    /// 1 for cash on delivery until 2026-09-24, and 1 is DebitCard in this enum: every cash order
+    /// was saved, shown to the customer and sent to the CRM as a card payment. A storefront still
+    /// cached in a browser keeps sending 1, so it is read as the cash on delivery it always meant.
+    /// </summary>
+    private static PaymentMethod? StorePaymentMethod(PaymentMethod requested) => requested switch
+    {
+        PaymentMethod.CashOnDelivery or PaymentMethod.BankTransfer => requested,
+        PaymentMethod.DebitCard => PaymentMethod.CashOnDelivery,
+        _ => null
+    };
 
     /// <summary>
     /// The city as the CRM spells it when the customer's text clearly means one of the CRM's cities

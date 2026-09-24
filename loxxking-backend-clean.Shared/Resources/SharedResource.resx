@@ -133,6 +133,9 @@
   <data name="Product_CountryPriceDuplicate" xml:space="preserve">
     <value>A country can only have one price.</value>
   </data>
+  <data name="Order_PaymentMethodNotSupported" xml:space="preserve">
+    <value>Choose cash on delivery or bank transfer.</value>
+  </data>
   <data name="Order_CountryNotSold" xml:space="preserve">
     <value>Choose a delivery country from the available countries.</value>
   </data>
