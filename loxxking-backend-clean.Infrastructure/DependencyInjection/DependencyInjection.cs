@@ -152,6 +152,7 @@ public static class DependencyInjection
         services.AddScoped<IGeolocationService, loxxking_backend_clean.Infrastructure.Services.GeolocationService>();
         services.AddHostedService<loxxking_backend_clean.Infrastructure.Services.OrderSyncBackgroundService>();
         services.AddHostedService<loxxking_backend_clean.Infrastructure.Services.VisitorChatSyncBackgroundService>();
+        services.AddHostedService<loxxking_backend_clean.Infrastructure.Services.OfferScheduleBackgroundService>();
 
         // Every store visit → Luxira CRM (popup + list + email). One instance: the handler queues, the host drains.
         services.AddSingleton<loxxking_backend_clean.Infrastructure.Services.StoreVisitCrmForwarder>();
