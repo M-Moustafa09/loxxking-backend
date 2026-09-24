@@ -307,4 +307,52 @@ public class VerifyOrdersRuntimeBehavior
         // The CRM could not be read: kept as typed.
         Assert.Equal("اسكندريه", await OrderCity("اسكندريه", Cities()));
     }
+
+    [Fact]
+    public async Task Verify_Order_Payment_Method_Is_Cash_Or_Bank_Transfer()
+    {
+        var db = GetDbContext();
+        var egypt = Country.Create("Egypt", "EGP", "ar", false);
+        db.Countries.Add(egypt);
+        var category = loxxking_backend_clean.Domain.Entities.Categories.Category.Create("Cat AR", "Cat EN", "cat-pay", "");
+        db.Categories.Add(category);
+        var product = Product.Create(
+            category.Id, "AR", "EN", "Desc", "slug-pay",
+            loxxking_backend_clean.Domain.ValueObjects.Money.FromDecimal(100),
+            null, new List<string>(), new List<string>(), new List<string>(),
+            "", null, null, null, true, true, null);
+        db.Products.Add(product);
+        db.ProductPrices.Add(new loxxking_backend_clean.Domain.Entities.Products.ProductPrice { ProductId = product.Id, CountryId = egypt.Id, Price = 100 });
+        await db.SaveChangesAsync();
+
+        var handler = new CreateOrderHandler(db, new Mock<ICurrentUserService>().Object, new Mock<IInvoicePdfGenerator>().Object, new Mock<IOrderNotificationService>().Object, GetCache(), Cities());
+        Task<loxxking_backend_clean.Shared.Result<CreateOrderResponse>> Place(PaymentMethod method) => handler.Handle(new CreateOrderCommand(
+            "Addr", "+20", null, method,
+            new List<loxxking_backend_clean.Application.Features.Orders.Commands.CreateOrder.OrderItemDto> { new(product.Id, 1) },
+            egypt.Id, "Guest", null), CancellationToken.None);
+        async Task<Order> Saved(Task<loxxking_backend_clean.Shared.Result<CreateOrderResponse>> placing)
+        {
+            var result = await placing;
+            Assert.True(result.IsSuccess);
+            return await db.Orders.FirstAsync(o => o.Id == result.Value.OrderId);
+        }
+
+        Assert.Equal(PaymentMethod.CashOnDelivery, (await Saved(Place(PaymentMethod.CashOnDelivery))).PaymentMethod);
+        var bank = await Saved(Place(PaymentMethod.BankTransfer));
+        Assert.Equal(PaymentMethod.BankTransfer, bank.PaymentMethod);
+        Assert.Equal(PaymentStatus.PendingVerification, bank.PaymentStatus);
+
+        // A storefront cached before the fix sends 1 (DebitCard) for cash on delivery.
+        var legacyCash = await Saved(Place(PaymentMethod.DebitCard));
+        Assert.Equal(PaymentMethod.CashOnDelivery, legacyCash.PaymentMethod);
+        Assert.Equal(PaymentStatus.Pending, legacyCash.PaymentStatus);
+
+        // No card or wallet payment is processed: refused, never recorded as paid.
+        foreach (var method in new[] { PaymentMethod.CreditCard, PaymentMethod.ApplePay, PaymentMethod.GooglePay, PaymentMethod.PayPal, PaymentMethod.Crypto })
+        {
+            var refused = await Place(method);
+            Assert.True(refused.IsFailure);
+            Assert.Equal("Order_PaymentMethodNotSupported", refused.Error.Message);
+        }
+    }
 }
