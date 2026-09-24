@@ -40,6 +40,12 @@ public class Order : BaseEntity {
     public int ViewCount { get; private set; }
     public int ProcessedCount { get; private set; }
     public bool IsSynced { get; private set; } = false;
+    /// <summary>Failed attempts to send this order to the CRM since it was placed.</summary>
+    public int SyncAttempts { get; private set; }
+    /// <summary>After a failed attempt, the earliest time to try again (null: due now).</summary>
+    public DateTime? NextSyncAttemptAt { get; private set; }
+    /// <summary>Why the last attempt failed, for whoever looks into a stuck order.</summary>
+    public string? LastSyncError { get; private set; }
 
     private readonly List<OrderItem> _orderItems = new();
     public IReadOnlyCollection<OrderItem> OrderItems => _orderItems.AsReadOnly();
@@ -125,6 +131,17 @@ public class Order : BaseEntity {
     public void MarkAsSynced()
     {
         IsSynced = true;
+        NextSyncAttemptAt = null;
+        LastSyncError = null;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>A send to the CRM failed: counted, and not tried again before <paramref name="retryAt"/>.</summary>
+    public void RecordSyncFailure(string? error, DateTime retryAt)
+    {
+        SyncAttempts++;
+        NextSyncAttemptAt = retryAt;
+        LastSyncError = error is { Length: > 1000 } ? error[..1000] : error;
         UpdatedAt = DateTime.UtcNow;
     }
 }

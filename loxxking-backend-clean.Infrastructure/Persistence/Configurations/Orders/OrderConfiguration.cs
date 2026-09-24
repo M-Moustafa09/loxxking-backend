@@ -21,5 +21,8 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(o => o.IsSynced).HasDefaultValue(false);
         builder.Property(o => o.Currency).IsRequired().HasMaxLength(10);
         builder.HasIndex(o => o.IsSynced);
+        builder.Property(o => o.LastSyncError).HasMaxLength(1000);
+        // The sync picks the unsent orders that are due (OrderSyncBackgroundService).
+        builder.HasIndex(o => new { o.IsSynced, o.NextSyncAttemptAt });
     }
 }
