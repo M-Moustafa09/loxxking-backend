@@ -34,6 +34,15 @@ public class VerifyOrdersRuntimeBehavior
         return new Microsoft.Extensions.Caching.Distributed.MemoryDistributedCache(opts);
     }
 
+    /// <summary>The CRM's city list for every country; null = the CRM could not be read.</summary>
+    private static ICheckoutCityDirectory Cities(params string[]? cities)
+    {
+        var directory = new Mock<ICheckoutCityDirectory>();
+        directory.Setup(d => d.GetCitiesAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(cities is { Length: > 0 } ? cities : null);
+        return directory.Object;
+    }
+
     [Fact]
     public async Task Verify_Order_Create_And_Status_Update()
     {
@@ -80,7 +89,7 @@ public class VerifyOrdersRuntimeBehavior
         
         currentUserMock.Setup(x => x.UserId).Returns(user.Id);
 
-        var createHandler = new CreateOrderHandler(db, currentUserMock.Object, pdfMock.Object, notifMock.Object, GetCache());
+        var createHandler = new CreateOrderHandler(db, currentUserMock.Object, pdfMock.Object, notifMock.Object, GetCache(), Cities());
         var createCmd = new CreateOrderCommand(
             "123 Main St",
             "+1234567890",
@@ -154,7 +163,7 @@ public class VerifyOrdersRuntimeBehavior
         db.Orders.AddRange(existingOrder1, existingLegacy);
         await db.SaveChangesAsync();
 
-        var createHandler = new CreateOrderHandler(db, currentUserMock.Object, pdfMock.Object, notifMock.Object, GetCache());
+        var createHandler = new CreateOrderHandler(db, currentUserMock.Object, pdfMock.Object, notifMock.Object, GetCache(), Cities());
 
         var cmd1 = new CreateOrderCommand(
             "Addr 1", "+12345", null, PaymentMethod.CashOnDelivery,
@@ -180,7 +189,7 @@ public class VerifyOrdersRuntimeBehavior
     {
         var db = GetDbContext();
         var currentUserMock = new Mock<ICurrentUserService>();
-        var handler = new CreateOrderHandler(db, currentUserMock.Object, new Mock<IInvoicePdfGenerator>().Object, new Mock<IOrderNotificationService>().Object, GetCache());
+        var handler = new CreateOrderHandler(db, currentUserMock.Object, new Mock<IInvoicePdfGenerator>().Object, new Mock<IOrderNotificationService>().Object, GetCache(), Cities());
 
         var saudi = Country.Create("Saudi Arabia", "SAR", "ar", false);
         var libya = Country.Create("Libya", "LYD", "ar", false);
@@ -235,7 +244,7 @@ public class VerifyOrdersRuntimeBehavior
     public async Task Verify_Order_Succeeds_Without_Inventory()
     {
         var db = GetDbContext();
-        var handler = new CreateOrderHandler(db, new Mock<ICurrentUserService>().Object, new Mock<IInvoicePdfGenerator>().Object, new Mock<IOrderNotificationService>().Object, GetCache());
+        var handler = new CreateOrderHandler(db, new Mock<ICurrentUserService>().Object, new Mock<IInvoicePdfGenerator>().Object, new Mock<IOrderNotificationService>().Object, GetCache(), Cities());
 
         // A product added from the dashboard: a price in Turkey, no inventory rows at all.
         var turkey = Country.Create("Turkey", "TRY", "tr", false);
@@ -259,5 +268,43 @@ public class VerifyOrdersRuntimeBehavior
         Assert.True(result.IsSuccess);
         Assert.Equal(2700m, result.Value.TotalAmount);
         Assert.Equal("TRY", result.Value.Currency);
+    }
+
+    [Fact]
+    public async Task Verify_Order_Takes_The_Crm_Spelling_Of_A_Typed_City()
+    {
+        var db = GetDbContext();
+        var egypt = Country.Create("Egypt", "EGP", "ar", false);
+        db.Countries.Add(egypt);
+        var category = loxxking_backend_clean.Domain.Entities.Categories.Category.Create("Cat AR", "Cat EN", "cat-city", "");
+        db.Categories.Add(category);
+        var product = Product.Create(
+            category.Id, "AR", "EN", "Desc", "slug-city",
+            loxxking_backend_clean.Domain.ValueObjects.Money.FromDecimal(100),
+            null, new List<string>(), new List<string>(), new List<string>(),
+            "", null, null, null, true, true, null);
+        db.Products.Add(product);
+        db.ProductPrices.Add(new loxxking_backend_clean.Domain.Entities.Products.ProductPrice { ProductId = product.Id, CountryId = egypt.Id, Price = 100 });
+        await db.SaveChangesAsync();
+
+        async Task<string> OrderCity(string typed, ICheckoutCityDirectory cities)
+        {
+            var handler = new CreateOrderHandler(db, new Mock<ICurrentUserService>().Object, new Mock<IInvoicePdfGenerator>().Object, new Mock<IOrderNotificationService>().Object, GetCache(), cities);
+            var result = await handler.Handle(new CreateOrderCommand(
+                "Addr", "+20", null, PaymentMethod.CashOnDelivery,
+                new List<loxxking_backend_clean.Application.Features.Orders.Commands.CreateOrder.OrderItemDto> { new(product.Id, 1) },
+                egypt.Id, "Guest", null) with { City = typed }, CancellationToken.None);
+            Assert.True(result.IsSuccess);
+            return (await db.Orders.FirstAsync(o => o.Id == result.Value.OrderId)).City;
+        }
+
+        var crm = Cities("القاهرة", "الإسكندرية", "الجيزة");
+        Assert.Equal("الإسكندرية", await OrderCity("اسكندريه", crm));
+        Assert.Equal("الإسكندرية", await OrderCity(" الاسكندرية ", crm));
+        Assert.Equal("الجيزة", await OrderCity("جيزه", crm));
+        // Not one of the CRM's cities: kept as typed, the order still goes through.
+        Assert.Equal("المنصورة", await OrderCity("المنصورة", crm));
+        // The CRM could not be read: kept as typed.
+        Assert.Equal("اسكندريه", await OrderCity("اسكندريه", Cities()));
     }
 }
