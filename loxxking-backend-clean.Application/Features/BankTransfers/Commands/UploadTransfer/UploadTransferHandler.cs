@@ -17,11 +17,21 @@ public class UploadTransferHandler : IRequestHandler<UploadTransferCommand, Resu
         _localizer = localizer;
     }
 
+    // Images only (owner decision 2026-09-30, as on Moon Light): the transfer is reviewed in the CRM,
+    // which shows a receipt as an image and takes nothing else — a PDF would never leave this store.
+    private static readonly Dictionary<string, string> ReceiptExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["image/jpeg"] = ".jpg",
+        ["image/jpg"] = ".jpg",
+        ["image/pjpeg"] = ".jpg",
+        ["image/png"] = ".png",
+        ["image/x-png"] = ".png",
+        ["image/webp"] = ".webp"
+    };
+
     public async Task<Result<UploadTransferResponse>> Handle(UploadTransferCommand request, CancellationToken cancellationToken)
     {
-        var cType = (request.ContentType ?? "").ToLowerInvariant();
-        var allowedTypes = new[] { "image/png", "image/jpeg", "image/jpg", "image/webp", "image/pjpeg", "image/x-png", "application/pdf" };
-        if (!allowedTypes.Contains(cType) && !cType.StartsWith("image/"))
+        if (!ReceiptExtensions.TryGetValue((request.ContentType ?? "").Trim(), out var extension))
         {
             return Result.Failure<UploadTransferResponse>(new Error("Error.Validation", "BankTransfer_OnlyImagesAllowed"));
         }
@@ -37,7 +47,8 @@ public class UploadTransferHandler : IRequestHandler<UploadTransferCommand, Resu
         var existing = await _context.BankTransfers
             .FirstOrDefaultAsync(bt => bt.OrderId == request.OrderId, cancellationToken);
 
-        var imageUrl = await _fileStorageService.UploadAsync(request.FileStream, request.FileName, request.ContentType, "bank-transfers", cancellationToken);
+        // Stored under the type's own extension, whatever the customer's file was called: the CRM goes by it.
+        var imageUrl = await _fileStorageService.UploadAsync(request.FileStream, "receipt" + extension, request.ContentType!, "bank-transfers", cancellationToken);
 
         BankTransfer transfer;
         if (existing != null)

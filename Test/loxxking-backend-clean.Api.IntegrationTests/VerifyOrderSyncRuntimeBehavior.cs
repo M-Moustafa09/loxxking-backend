@@ -1,4 +1,5 @@
 using loxxking_backend_clean.Application.Common.Interfaces;
+using loxxking_backend_clean.Domain.Entities.BankTransfers;
 using loxxking_backend_clean.Domain.Entities.Countries;
 using loxxking_backend_clean.Domain.Entities.Orders;
 using loxxking_backend_clean.Domain.Entities.Products;
@@ -36,6 +37,31 @@ public class VerifyOrderSyncRuntimeBehavior
                 ? Result.Failure<CrmSyncResponse>(new Error("ApiError", "Unknown product code"))
                 : Result.Success(new CrmSyncResponse { Success = true, LegacyCrmOrderId = 1 }));
         }
+
+        /// <summary>The receipts the CRM was handed: order id, file name, content type.</summary>
+        public List<(Guid OrderId, string FileName, string ContentType)> Receipts { get; } = new();
+        public Error? ReceiptError { get; set; }
+
+        public Task<Result> SendBankTransferReceiptAsync(Guid loxxkingOrderId, Stream receipt, string fileName, string contentType, CancellationToken cancellationToken = default)
+        {
+            if (LinkError is { } linkError) return Task.FromResult(Result.Failure(linkError));
+            Receipts.Add((loxxkingOrderId, fileName, contentType));
+            return Task.FromResult(ReceiptError is { } error ? Result.Failure(error) : Result.Success());
+        }
+    }
+
+    /// <summary>The store's uploads: only the addresses in <see cref="Files"/> exist.</summary>
+    private sealed class FakeStorage : IFileStorageService
+    {
+        public HashSet<string> Files { get; } = new();
+
+        public Task<string> UploadAsync(Stream fileStream, string fileName, string contentType, string folder, CancellationToken cancellationToken)
+            => throw new NotSupportedException();
+
+        public Task DeleteAsync(string fileUrl, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task<Stream?> OpenReadAsync(string fileUrl, CancellationToken cancellationToken)
+            => Task.FromResult<Stream?>(Files.Contains(fileUrl) ? new MemoryStream(new byte[] { 1, 2, 3 }) : null);
     }
 
     /// <summary>Accepts every order and hands each payload to <paramref name="onSend"/>.</summary>
@@ -46,9 +72,14 @@ public class VerifyOrderSyncRuntimeBehavior
             onSend(dto);
             return Task.FromResult(Result.Success(new CrmSyncResponse { Success = true, LegacyCrmOrderId = 1 }));
         }
+
+        public Task<Result> SendBankTransferReceiptAsync(Guid loxxkingOrderId, Stream receipt, string fileName, string contentType, CancellationToken cancellationToken = default)
+            => Task.FromResult(Result.Success());
     }
 
-    private static (OrderSyncBackgroundService Sync, Func<ApplicationDbContext> Db, FakeCrm Crm) Setup(ILegacyCrmSyncService? crmOverride = null)
+    private readonly FakeStorage _storage = new();
+
+    private (OrderSyncBackgroundService Sync, Func<ApplicationDbContext> Db, FakeCrm Crm) Setup(ILegacyCrmSyncService? crmOverride = null)
     {
         var connection = new SqliteConnection("DataSource=:memory:");
         connection.Open();
@@ -58,6 +89,7 @@ public class VerifyOrderSyncRuntimeBehavior
         services.AddDbContext<ApplicationDbContext>(o => o.UseSqlite(connection));
         services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<ApplicationDbContext>());
         services.AddSingleton<ILegacyCrmSyncService>(crmOverride ?? crm);
+        services.AddSingleton<IFileStorageService>(_storage);
         var provider = services.BuildServiceProvider();
 
         ApplicationDbContext Db() => provider.CreateScope().ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -175,5 +207,138 @@ public class VerifyOrderSyncRuntimeBehavior
 
         Assert.NotNull(sent);
         Assert.Equal(new DateTime(2026, 9, 25, 0, 15, 0), sent!.CreatedAt);
+    }
+
+    private const string ReceiptUrl = "https://loxxking.com/uploads/bank-transfers/0a1b2c.png";
+
+    /// <summary>One bank-transfer order with the receipt its customer uploaded at checkout.</summary>
+    private async Task<(Guid OrderId, Guid TransferId)> SeedReceiptAsync(ApplicationDbContext db, DateTime placed, string receiptUrl = ReceiptUrl, bool fileExists = true)
+    {
+        var country = Country.Create("Egypt", "EGP", "ar", false);
+        db.Countries.Add(country);
+        var order = Order.Create(null, country.Id, "BANK-01", "Addr", "+20", null, PaymentMethod.BankTransfer, "Guest", currency: "EGP", city: "القاهرة");
+        order.AddItem(Guid.NewGuid(), 1, Money.FromDecimal(100));
+        order.CreatedAt = placed;
+        db.Orders.Add(order);
+        var transfer = BankTransfer.Create(order.Id, receiptUrl);
+        db.BankTransfers.Add(transfer);
+        await db.SaveChangesAsync();
+        if (fileExists) _storage.Files.Add(receiptUrl);
+        return (order.Id, transfer.Id);
+    }
+
+    [Fact]
+    public async Task A_Receipt_Follows_Its_Order_To_The_Crm_Once()
+    {
+        var (sync, Db, crm) = Setup();
+        var now = new DateTime(2026, 9, 30, 12, 0, 0, DateTimeKind.Utc);
+        var (orderId, transferId) = await SeedReceiptAsync(Db(), now.AddMinutes(-1));
+
+        // The CRM does not have the order yet: there is nothing to attach the receipt to.
+        await sync.ProcessPendingReceiptsAsync(now, CancellationToken.None);
+        Assert.Empty(crm.Receipts);
+
+        await sync.ProcessPendingOrdersAsync(now, CancellationToken.None);
+        await sync.ProcessPendingReceiptsAsync(now, CancellationToken.None);
+        Assert.Equal(new[] { (orderId, "0a1b2c.png", "image/png") }, crm.Receipts);
+        var transfer = await Db().BankTransfers.FirstAsync(t => t.Id == transferId);
+        Assert.Equal(now, transfer.CrmReceiptSentAt);
+        Assert.Equal(0, transfer.CrmReceiptAttempts);
+
+        // Sent is sent: the next passes leave it alone.
+        await sync.ProcessPendingReceiptsAsync(now.AddSeconds(15), CancellationToken.None);
+        Assert.Single(crm.Receipts);
+    }
+
+    [Fact]
+    public async Task A_Receipt_The_Crm_Could_Not_Take_Now_Is_Retried_On_The_Order_Backoff()
+    {
+        var (sync, Db, crm) = Setup();
+        var now = new DateTime(2026, 9, 30, 12, 0, 0, DateTimeKind.Utc);
+        var (_, transferId) = await SeedReceiptAsync(Db(), now.AddMinutes(-1));
+        await sync.ProcessPendingOrdersAsync(now, CancellationToken.None);
+        crm.ReceiptError = new Error("HttpError", "HTTP 500: storage down");
+
+        await sync.ProcessPendingReceiptsAsync(now, CancellationToken.None);
+        var transfer = await Db().BankTransfers.FirstAsync(t => t.Id == transferId);
+        Assert.Null(transfer.CrmReceiptSentAt);
+        Assert.Equal(1, transfer.CrmReceiptAttempts);
+        Assert.Equal(now.AddSeconds(30), transfer.CrmReceiptNextAttemptAt);
+        Assert.Equal("HTTP 500: storage down", transfer.CrmReceiptLastError);
+
+        // Not before its time, then through once the CRM is back.
+        await sync.ProcessPendingReceiptsAsync(now.AddSeconds(15), CancellationToken.None);
+        Assert.Single(crm.Receipts);
+        crm.ReceiptError = null;
+        await sync.ProcessPendingReceiptsAsync(now.AddSeconds(30), CancellationToken.None);
+        transfer = await Db().BankTransfers.FirstAsync(t => t.Id == transferId);
+        Assert.Equal(now.AddSeconds(30), transfer.CrmReceiptSentAt);
+        Assert.Null(transfer.CrmReceiptNextAttemptAt);
+        Assert.Null(transfer.CrmReceiptLastError);
+    }
+
+    [Fact]
+    public async Task A_Receipt_The_Crm_Refuses_As_A_File_Waits_A_Day()
+    {
+        var (sync, Db, crm) = Setup();
+        var now = new DateTime(2026, 9, 30, 12, 0, 0, DateTimeKind.Utc);
+        var (_, transferId) = await SeedReceiptAsync(Db(), now.AddMinutes(-1), "https://loxxking.com/uploads/bank-transfers/0a1b2c.pdf");
+        await sync.ProcessPendingOrdersAsync(now, CancellationToken.None);
+        crm.ReceiptError = new Error("ReceiptRejected", "HTTP 400: The receipt must be a JPG, PNG or WEBP image.");
+
+        await sync.ProcessPendingReceiptsAsync(now, CancellationToken.None);
+
+        Assert.Equal("application/pdf", Assert.Single(crm.Receipts).ContentType);
+        var transfer = await Db().BankTransfers.FirstAsync(t => t.Id == transferId);
+        Assert.Equal(now.AddDays(1), transfer.CrmReceiptNextAttemptAt);
+    }
+
+    [Fact]
+    public async Task A_Receipt_Missing_From_The_Disk_Is_Not_Sent_And_Waits_A_Day()
+    {
+        var (sync, Db, crm) = Setup();
+        var now = new DateTime(2026, 9, 30, 12, 0, 0, DateTimeKind.Utc);
+        var (_, transferId) = await SeedReceiptAsync(Db(), now.AddMinutes(-1), fileExists: false);
+        await sync.ProcessPendingOrdersAsync(now, CancellationToken.None);
+
+        await sync.ProcessPendingReceiptsAsync(now, CancellationToken.None);
+
+        Assert.Empty(crm.Receipts);
+        var transfer = await Db().BankTransfers.FirstAsync(t => t.Id == transferId);
+        Assert.Equal(1, transfer.CrmReceiptAttempts);
+        Assert.Equal(now.AddDays(1), transfer.CrmReceiptNextAttemptAt);
+    }
+
+    [Fact]
+    public async Task A_Receipt_Already_Reviewed_In_The_Store_Is_Not_Sent()
+    {
+        var (sync, Db, crm) = Setup();
+        var now = new DateTime(2026, 9, 30, 12, 0, 0, DateTimeKind.Utc);
+        var (_, transferId) = await SeedReceiptAsync(Db(), now.AddMinutes(-1));
+        await sync.ProcessPendingOrdersAsync(now, CancellationToken.None);
+        var db = Db();
+        (await db.BankTransfers.FirstAsync(t => t.Id == transferId)).Approve();
+        await db.SaveChangesAsync();
+
+        await sync.ProcessPendingReceiptsAsync(now, CancellationToken.None);
+
+        Assert.Empty(crm.Receipts);
+    }
+
+    [Fact]
+    public async Task A_Disabled_Crm_Link_Does_Not_Count_Against_The_Receipts()
+    {
+        var (sync, Db, crm) = Setup();
+        var now = new DateTime(2026, 9, 30, 12, 0, 0, DateTimeKind.Utc);
+        var (_, transferId) = await SeedReceiptAsync(Db(), now.AddMinutes(-1));
+        await sync.ProcessPendingOrdersAsync(now, CancellationToken.None);
+        crm.LinkError = new Error("SyncDisabled", "Sync is disabled in configuration.");
+
+        await sync.ProcessPendingReceiptsAsync(now, CancellationToken.None);
+
+        var transfer = await Db().BankTransfers.FirstAsync(t => t.Id == transferId);
+        Assert.Null(transfer.CrmReceiptSentAt);
+        Assert.Equal(0, transfer.CrmReceiptAttempts);
+        Assert.Null(transfer.CrmReceiptNextAttemptAt);
     }
 }

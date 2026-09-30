@@ -92,4 +92,32 @@ public class LocalFileStorageService : IFileStorageService
 
         return Task.CompletedTask;
     }
+
+    public Task<Stream?> OpenReadAsync(string fileUrl, CancellationToken cancellationToken)
+    {
+        Stream? stream = null;
+        if (!string.IsNullOrWhiteSpace(fileUrl))
+        {
+            var webRoot = _env.WebRootPath;
+            if (string.IsNullOrEmpty(webRoot))
+            {
+                webRoot = Path.Combine(_env.ContentRootPath, "wwwroot");
+            }
+
+            var pathOnly = Uri.TryCreate(fileUrl, UriKind.Absolute, out var uri) ? uri.AbsolutePath : fileUrl;
+            var relativePath = Uri.UnescapeDataString(pathOnly).TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
+
+            // Only what UploadAsync wrote: the URL is read from the database, so it must not lead
+            // anywhere else on the disk.
+            var uploadsRoot = Path.GetFullPath(Path.Combine(webRoot, "uploads")) + Path.DirectorySeparatorChar;
+            var fullPath = Path.GetFullPath(Path.Combine(webRoot, relativePath));
+
+            if (fullPath.StartsWith(uploadsRoot, StringComparison.OrdinalIgnoreCase) && File.Exists(fullPath))
+            {
+                stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
+            }
+        }
+
+        return Task.FromResult(stream);
+    }
 }
