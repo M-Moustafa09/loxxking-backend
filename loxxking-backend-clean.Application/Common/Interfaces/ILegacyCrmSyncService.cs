@@ -40,4 +40,11 @@ public class CrmSyncResponse
 public interface ILegacyCrmSyncService
 {
     Task<Result<CrmSyncResponse>> SyncOrderAsync(CrmOrderSyncDto dto, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Hands the customer's bank-transfer receipt to the CRM, which attaches it to the order already synced
+    /// from <paramref name="loxxkingOrderId"/>. Error code <c>ReceiptRejected</c>: the CRM will not take this
+    /// file however often it is sent (not an image, too large).
+    /// </summary>
+    Task<Result> SendBankTransferReceiptAsync(Guid loxxkingOrderId, Stream receipt, string fileName, string contentType, CancellationToken cancellationToken = default);
 }

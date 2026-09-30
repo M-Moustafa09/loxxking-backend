@@ -8,7 +8,9 @@ namespace loxxking_backend_clean.Infrastructure.Services;
 public class CloudinaryFileStorageService : IFileStorageService
 {
     private readonly Cloudinary _cloudinary;
+    private readonly string _cloudName;
     private readonly int _maxFileSizeBytes = 5 * 1024 * 1024; // 5MB
+    private static readonly HttpClient Downloads = new() { Timeout = TimeSpan.FromSeconds(30) };
 
     public CloudinaryFileStorageService(IConfiguration configuration)
     {
@@ -21,6 +23,7 @@ public class CloudinaryFileStorageService : IFileStorageService
 
         var account = new Account(cloudName, apiKey, apiSecret);
         _cloudinary = new Cloudinary(account);
+        _cloudName = cloudName;
     }
 
     public async Task<string> UploadAsync(Stream stream, string fileName, string contentType, string folder, CancellationToken cancellationToken)
@@ -70,5 +73,26 @@ public class CloudinaryFileStorageService : IFileStorageService
         {
             Console.WriteLine($"Failed to delete file from Cloudinary: {ex.Message}");
         }
+    }
+
+    public async Task<Stream?> OpenReadAsync(string fileUrl, CancellationToken cancellationToken)
+    {
+        // Only our own uploads: never fetch an arbitrary address read from the database.
+        if (!Uri.TryCreate(fileUrl, UriKind.Absolute, out var uri)
+            || uri.Scheme != Uri.UriSchemeHttps
+            || !uri.Host.Equals("res.cloudinary.com", StringComparison.OrdinalIgnoreCase)
+            || !uri.AbsolutePath.StartsWith($"/{_cloudName}/", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        using var response = await Downloads.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            return null;
+
+        var memory = new MemoryStream();
+        await response.Content.CopyToAsync(memory, cancellationToken);
+        memory.Position = 0;
+        return memory;
     }
 }

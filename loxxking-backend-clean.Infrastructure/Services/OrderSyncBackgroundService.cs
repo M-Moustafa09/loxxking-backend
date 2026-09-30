@@ -1,4 +1,6 @@
 using loxxking_backend_clean.Application.Common.Interfaces;
+using loxxking_backend_clean.Domain.Enums;
+using loxxking_backend_clean.Shared;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -38,6 +40,8 @@ public class OrderSyncBackgroundService : BackgroundService
             try
             {
                 await ProcessPendingOrdersAsync(DateTime.UtcNow, stoppingToken);
+                // After the orders: a receipt can only be attached to an order the CRM already has.
+                await ProcessPendingReceiptsAsync(DateTime.UtcNow, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -135,6 +139,87 @@ public class OrderSyncBackgroundService : BackgroundService
             await dbContext.SaveChangesAsync(stoppingToken);
         }
     }
+
+    // A receipt that cannot go as it is (file gone from the disk, or the CRM refuses the file itself)
+    // is looked at again once a day rather than on the order backoff: only a person can change that.
+    private static readonly TimeSpan UnsendableReceiptDelay = TimeSpan.FromDays(1);
+
+    /// <summary>
+    /// One pass: hands the CRM the bank-transfer receipts customers uploaded at checkout, oldest first.
+    /// The CRM attaches each to its order where its staff attach one, so whoever reviews the transfer
+    /// in the CRM sees the receipt (it used to stay in this store's dashboard only). Only receipts
+    /// still awaiting review, and only once their order is in the CRM. A customer who uploads again
+    /// gets a new row, which is sent in turn; the CRM keeps the latest.
+    /// </summary>
+    public async Task ProcessPendingReceiptsAsync(DateTime now, CancellationToken stoppingToken)
+    {
+        using var scope = _serviceProvider.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
+        var syncService = scope.ServiceProvider.GetRequiredService<ILegacyCrmSyncService>();
+        var storage = scope.ServiceProvider.GetRequiredService<IFileStorageService>();
+
+        var pendingReceipts = await dbContext.BankTransfers
+            .Where(t => t.CrmReceiptSentAt == null
+                        && t.Status == BankTransferStatus.PendingReview
+                        && (t.CrmReceiptNextAttemptAt == null || t.CrmReceiptNextAttemptAt <= now)
+                        && t.Order.IsSynced)
+            .OrderBy(t => t.SubmittedAt)
+            .Take(10)
+            .ToListAsync(stoppingToken);
+
+        foreach (var transfer in pendingReceipts)
+        {
+            if (stoppingToken.IsCancellationRequested)
+                break;
+
+            Result result;
+            var unsendable = false;
+            await using (var file = await storage.OpenReadAsync(transfer.ProofImageUrl, stoppingToken))
+            {
+                if (file is null)
+                {
+                    unsendable = true;
+                    result = Result.Failure(new Error("ReceiptMissing", "Receipt file not found in storage."));
+                }
+                else
+                {
+                    var fileName = Path.GetFileName(
+                        Uri.TryCreate(transfer.ProofImageUrl, UriKind.Absolute, out var uri) ? uri.AbsolutePath : transfer.ProofImageUrl);
+                    result = await syncService.SendBankTransferReceiptAsync(transfer.OrderId, file, fileName, ContentTypeOf(fileName), stoppingToken);
+                    unsendable = result.IsFailure && result.Error.Code == "ReceiptRejected";
+                }
+            }
+
+            if (result.IsSuccess)
+            {
+                transfer.MarkCrmReceiptSent(now);
+                _logger.LogInformation("Bank-transfer receipt of order {OrderId} sent to the CRM.", transfer.OrderId);
+            }
+            else if (LinkUnavailableCodes.Contains(result.Error.Code) || stoppingToken.IsCancellationRequested)
+            {
+                // Nothing will get through until the link is configured; the receipts keep their place.
+                break;
+            }
+            else
+            {
+                var retryAt = now + (unsendable ? UnsendableReceiptDelay : RetryDelay(transfer.CrmReceiptAttempts + 1));
+                transfer.RecordCrmReceiptFailure(result.Error.Message, retryAt);
+                _logger.LogWarning("Bank-transfer receipt of order {OrderId} did not reach the CRM (attempt {Attempts}, {Code}); next try at {RetryAt:u}. Error: {Error}",
+                    transfer.OrderId, transfer.CrmReceiptAttempts, result.Error.Code, retryAt, result.Error.Message);
+            }
+
+            await dbContext.SaveChangesAsync(stoppingToken);
+        }
+    }
+
+    private static string ContentTypeOf(string fileName) => Path.GetExtension(fileName).ToLowerInvariant() switch
+    {
+        ".png" => "image/png",
+        ".webp" => "image/webp",
+        ".gif" => "image/gif",
+        ".pdf" => "application/pdf",
+        _ => "image/jpeg"
+    };
 
     /// <summary>The wait before the next try after the <paramref name="attempt"/>-th failure.</summary>
     public static TimeSpan RetryDelay(int attempt)

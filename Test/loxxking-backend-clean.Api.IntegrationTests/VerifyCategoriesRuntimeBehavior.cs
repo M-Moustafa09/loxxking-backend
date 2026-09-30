@@ -20,6 +20,8 @@ public class VerifyCategoriesRuntimeBehavior
             => Task.FromResult($"/uploads/{folder}/{fileName}");
 
         public Task DeleteAsync(string fileUrl, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task<Stream?> OpenReadAsync(string fileUrl, CancellationToken cancellationToken) => Task.FromResult<Stream?>(null);
     }
 
     private static ApplicationDbContext GetDbContext()
